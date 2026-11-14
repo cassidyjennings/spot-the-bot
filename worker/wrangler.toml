@@ -1,0 +1,30 @@
+name = "spot-the-bot"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# Markdown prompt files are bundled as plain text.
+rules = [{ type = "Text", globs = ["**/*.md"], fallthrough = true }]
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "GameRoom"
+
+# SQLite-backed Durable Objects are available on the Workers Free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameRoom"]
+
+[vars]
+LLM_PROVIDER = "gemini"
+LLM_MODEL = "gemini-3.1-flash-lite"   # CHECK the exact model ID + limits in Google AI Studio
+LLM_MODE = "live"                     # "mock" for rehearsal without an API key
+# Set to your Pages origin after deploying, e.g. "https://yourname.github.io"
+ALLOWED_ORIGINS = ""
+SESSIONS = [
+  { id = "s1", name = "12:05 section" },
+  { id = "s2", name = "1:05 section" },
+  { id = "s3", name = "2:05 section" },
+  { id = "s4", name = "3:05 section" },
+]
+# Secrets (set with `npx wrangler secret put NAME --config worker/wrangler.toml`):
+#   INSTRUCTOR_PASSWORD, SESSION_PASSWORDS (JSON like {"s1":"...","s2":"..."}), LLM_API_KEY

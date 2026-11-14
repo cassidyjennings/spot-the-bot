@@ -1,0 +1,27 @@
+{
+  "name": "spot-the-bot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:web": "vite --config web/vite.config.ts",
+    "dev:worker": "wrangler dev --config worker/wrangler.toml",
+    "build": "vite build --config web/vite.config.ts",
+    "deploy:worker": "wrangler deploy --config worker/wrangler.toml",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "bots": "tsx scripts/bots.ts"
+  },
+  "dependencies": {
+    "preact": "^10.24.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241106.0",
+    "@preact/preset-vite": "^2.9.1",
+    "@types/node": "^22.20.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4",
+    "wrangler": "^3.86.0"
+  }
+}

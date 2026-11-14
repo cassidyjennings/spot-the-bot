@@ -1,0 +1,4 @@
+INSTRUCTOR_PASSWORD=teach
+SESSION_PASSWORDS={"s1":"alpha","s2":"bravo","s3":"charlie","s4":"delta"}
+LLM_MODE=mock
+LLM_API_KEY=
