@@ -19,7 +19,7 @@ LLM_PROVIDER = "gemini"
 LLM_MODEL = "gemini-3.1-flash-lite"   # CHECK the exact model ID + limits in Google AI Studio
 LLM_MODE = "live"                     # "mock" for rehearsal without an API key
 # Set to your Pages origin after deploying, e.g. "https://yourname.github.io"
-ALLOWED_ORIGINS = ""
+ALLOWED_ORIGINS = "https://cassidyjennings.github.io"
 SESSIONS = [
   { id = "s1", name = "12:05 section" },
   { id = "s2", name = "1:05 section" },
