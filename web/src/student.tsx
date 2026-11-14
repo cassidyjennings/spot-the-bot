@@ -153,7 +153,6 @@ function Interrogator({ v, room }: { v: GroupView; room: Room<GroupView> }) {
   const timeUp = ms !== null && ms <= 0 && v.pausedRemaining === null;
   const paused = v.pausedRemaining !== null;
   const latest = exs[exs.length - 1];
-  const needsSlider = latest?.state === 'released' && latest.slider === 0 && latest.recordedGuess === null;
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [exs.length, latest?.state]);
 
@@ -165,11 +164,10 @@ function Interrogator({ v, room }: { v: GroupView; room: Room<GroupView> }) {
             <p>
               Ask a question. You'll get <b>two answers</b>: one from another group of students, one from an AI.
             </p>
-            <p>Slide toward the answer you think is the <b>human</b>. The more confident, the further you slide.</p>
           </div>
         )}
         {exs.map((e) => (
-          <ExchangeCard e={e} isLatest={e === latest} onGuess={(val) => room.send({ t: 'guess:update', exchangeId: e.id, v: val })} />
+          <ExchangeCard e={e} isLatest={e === latest} editable={e === latest} onGuess={(val) => room.send({ t: 'guess:update', exchangeId: e.id, v: val })} />
         ))}
         <div ref={endRef} />
       </div>
@@ -182,7 +180,6 @@ function Interrogator({ v, room }: { v: GroupView; room: Room<GroupView> }) {
           setQ('');
         }}
       >
-        {needsSlider && !timeUp && <div class="hint">👆 Set your slider before the next question</div>}
         <textarea
           value={q}
           maxLength={MAX_QUESTION}
@@ -202,7 +199,10 @@ function Interrogator({ v, room }: { v: GroupView; room: Room<GroupView> }) {
   );
 }
 
-function ExchangeCard({ e, isLatest, onGuess }: { e: InterrogatorExchangeView; isLatest: boolean; onGuess: (v: number) => void }) {
+function ExchangeCard({ e, isLatest, editable, onGuess }: { e: InterrogatorExchangeView; isLatest: boolean; editable: boolean; onGuess: (v: number) => void }) {
+  // Show the how-to only until the slider has been moved, and only on the newest released answer.
+  const untouched = isLatest && e.slider === 0 && e.recordedGuess === null;
+  const locked = !editable || e.recordedGuess !== null;
   return (
     <div class={`card exchange ${e.state}`}>
       <div class="q">
@@ -223,13 +223,13 @@ function ExchangeCard({ e, isLatest, onGuess }: { e: InterrogatorExchangeView; i
               {e.right}
             </div>
           </div>
-          <GuessSlider
-            value={e.slider}
-            ghost={e.recordedGuess}
-            onChange={onGuess}
-            pulse={isLatest && e.slider === 0 && e.recordedGuess === null}
-          />
-          {e.recordedGuess !== null && <div class="muted small">Locked in at the grey marker. Changes now don't count.</div>}
+          {untouched && (
+            <div class="hint">
+              Which answer is the <b>human</b>? Slide toward it. The more confident you are, the further you slide.
+            </div>
+          )}
+          <GuessSlider value={e.slider} ghost={null} onChange={onGuess} disabled={locked} pulse={untouched} />
+          {(!isLatest || e.recordedGuess !== null) && <div class="muted small">Locked in.</div>}
         </>
       )}
     </div>

@@ -99,6 +99,8 @@ export interface DisplayView extends Clock {
   groupCount: number;
   questionsThisRound: number;
   stats: StatsBundle;
+  /** Ranked by total score; empty until Round 1 is revealed. */
+  leaderboard: { name: string; r1: number; r2: number | null; total: number }[];
 }
 
 const ACTIVE: Record<Round, Phase> = { 1: 'round1_active', 2: 'round2_active' };
@@ -276,6 +278,20 @@ export function instructorView(s: RoomState, instructorId: string, now: number):
   };
 }
 
+function leaderboard(s: RoomState): DisplayView['leaderboard'] {
+  if (!roundRevealed(s.phase, 1)) return [];
+  const r1 = groupScores(s, 1);
+  const r2 = groupScores(s, 2);
+  const has2 = roundRevealed(s.phase, 2);
+  return presentGroups(s)
+    .map((g) => {
+      const a = round2(r1.get(g.id) ?? 0);
+      const b = has2 ? round2(r2.get(g.id) ?? 0) : null;
+      return { name: g.name, r1: a, r2: b, total: round2(a + (b ?? 0)) };
+    })
+    .sort((x, y) => y.total - x.total || x.name.localeCompare(y.name));
+}
+
 export function displayView(s: RoomState, now: number): DisplayView {
   const ids = new Set(s.matches.filter((m) => m.round === s.round).map((m) => m.id));
   return {
@@ -284,5 +300,6 @@ export function displayView(s: RoomState, now: number): DisplayView {
     groupCount: presentGroups(s).length,
     questionsThisRound: s.exchanges.filter((e) => ids.has(e.matchId) && e.state !== 'void').length,
     stats: statsBundle(s),
+    leaderboard: leaderboard(s),
   };
 }

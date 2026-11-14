@@ -436,6 +436,7 @@ export class Engine {
     if (!e || e.state !== 'released') return;
     const m = this.matchOf(e);
     if (m.interrogatorId !== groupId || m.round !== this.s.round || !isActive(this.s.phase)) return;
+    if (e.recordedGuess !== null) return; // locked once the next question is asked or the round ends
     const x = Number(v);
     if (!Number.isFinite(x)) return;
     e.slider = Math.max(-1, Math.min(1, Math.round(x * 100) / 100));

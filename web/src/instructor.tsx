@@ -130,6 +130,8 @@ function Dashboard({ v, room, sections, sid, onSwitch }: { v: InstructorView; ro
   const groupName = (id: string) => v.groups.find((g) => g.id === id)?.name ?? '?';
   const stale = (g: { connected: boolean; lastSeen: number }) => !g.connected || serverNow - g.lastSeen > STALE_MS;
   const [minutes, setMinutes] = useState(String(v.config.roundMs / 60000));
+  const [tab, setTab] = useState<'matches' | 'groups' | 'stats'>('matches');
+  const hasStats = !!(v.stats.r1 || v.stats.r2);
 
   const confirmSend = (text: string, m: Parameters<typeof send>[0]) => {
     if (confirm(text)) send(m);
@@ -201,66 +203,78 @@ function Dashboard({ v, room, sections, sid, onSwitch }: { v: InstructorView; ro
         </div>
       )}
 
+      <MyQueue v={v} room={room} />
+
       <div class="dash-grid">
-        <section>
-          <MyQueue v={v} room={room} />
-          <div class="card">
-            <h3>Groups</h3>
-            <table class="roster">
-              <tbody>
-                {v.groups
-                  .filter((g) => !g.removed)
-                  .map((g) => (
-                    <tr>
-                      <td>
-                        <span class={`dot ${g.released ? 'off' : stale(g) ? 'warn' : 'ok'}`} title={g.released ? 'name released' : stale(g) ? 'no heartbeat' : 'connected'} />
-                        {g.name}
-                      </td>
-                      <td class="muted small">{v.phase !== 'lobby' && `R1 ${v.scores[g.id]?.r1 ?? 0} · R2 ${v.scores[g.id]?.r2 ?? 0}`}</td>
-                      <td class="actions">
-                        {v.waitingGroupIds.includes(g.id) && (
-                          <button class="small" onClick={() => send({ t: 'late:match', groupId: g.id })}>Match with me</button>
-                        )}
-                        <button class="small" title="Lets a group that lost its phone rejoin with the same name" onClick={() => confirmSend(`Release "${g.name}"? Its current phone will be signed out; the group can rejoin with the same name.`, { t: 'group:release', groupId: g.id })}>
-                          Release name
-                        </button>
-                        <button class="small danger" onClick={() => confirmSend(`Remove "${g.name}" from the game?`, { t: 'group:remove', groupId: g.id })}>Remove</button>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-            {v.waitingGroupIds.length > 0 && <p class="small muted">Groups with "Match with me" joined late. Leave them unmatched and they'll play an instructor in Round 2.</p>}
+        <section class="panel">
+          <div class="tabs" role="tablist">
+            <button role="tab" aria-selected={tab === 'matches'} class={tab === 'matches' ? 'on' : ''} onClick={() => setTab('matches')}>
+              Matches {current.length > 0 && <span class="count">{current.length}</span>}
+            </button>
+            <button role="tab" aria-selected={tab === 'groups'} class={tab === 'groups' ? 'on' : ''} onClick={() => setTab('groups')}>
+              Groups <span class="count">{v.groups.filter((g) => !g.removed).length}</span>
+            </button>
+            {hasStats && (
+              <button role="tab" aria-selected={tab === 'stats'} class={tab === 'stats' ? 'on' : ''} onClick={() => setTab('stats')}>
+                Class stats
+              </button>
+            )}
           </div>
+
+          {tab === 'matches' && (
+            <div class="stack">
+              {current.length === 0 && <p class="muted">Matches appear when a round starts.</p>}
+              {current.map((m) => (
+                <MatchCard m={m} v={v} send={send} stale={m.responderGroupId ? stale(v.groups.find((g) => g.id === m.responderGroupId)!) : false} />
+              ))}
+            </div>
+          )}
+
+          {tab === 'groups' && (
+            <div class="stack">
+              {v.groups
+                .filter((g) => !g.removed)
+                .map((g) => (
+                  <div class="group-row">
+                    <div class="group-main">
+                      <span class={`dot ${g.released ? 'off' : stale(g) ? 'warn' : 'ok'}`} title={g.released ? 'name released' : stale(g) ? 'no heartbeat' : 'connected'} />
+                      <b>{g.name}</b>
+                      {v.phase !== 'lobby' && <span class="muted small">R1 {v.scores[g.id]?.r1 ?? 0} · R2 {v.scores[g.id]?.r2 ?? 0}</span>}
+                    </div>
+                    <div class="actions">
+                      {v.waitingGroupIds.includes(g.id) && (
+                        <button class="small primary" onClick={() => send({ t: 'late:match', groupId: g.id })}>Match with me</button>
+                      )}
+                      <button class="small" title="Lets a group that lost its phone rejoin with the same name" onClick={() => confirmSend(`Release "${g.name}"? Its current phone will be signed out; the group can rejoin with the same name.`, { t: 'group:release', groupId: g.id })}>
+                        Release name
+                      </button>
+                      <button class="small danger" onClick={() => confirmSend(`Remove "${g.name}" from the game?`, { t: 'group:remove', groupId: g.id })}>Remove</button>
+                    </div>
+                  </div>
+                ))}
+              {v.groups.filter((g) => !g.removed).length === 0 && <p class="muted">No groups yet.</p>}
+              {v.waitingGroupIds.length > 0 && <p class="small muted">Groups with "Match with me" joined late. Leave them unmatched and they'll play an instructor in Round 2.</p>}
+            </div>
+          )}
+
+          {tab === 'stats' && hasStats && <StatsBundleView stats={v.stats} />}
         </section>
 
-        <section>
-          <h3>Matches {v.round ? `(Round ${v.round})` : ''}</h3>
-          {current.length === 0 && <p class="muted">Matches appear when a round starts.</p>}
-          {current.map((m) => (
-            <MatchCard m={m} v={v} send={send} stale={m.responderGroupId ? stale(v.groups.find((g) => g.id === m.responderGroupId)!) : false} />
-          ))}
-        </section>
-
-        <section>
-          <h3>Question feed</h3>
+        <section class="panel">
+          <h2 class="panel-title">Question feed</h2>
           <Feed matches={current} send={send} groupName={groupName} canBlock={active} />
         </section>
       </div>
 
-      {(v.stats.r1 || v.stats.r2) && (
-        <>
-          <h2>Class stats</h2>
-          <StatsBundleView stats={v.stats} />
-        </>
-      )}
-
-      <footer class="dash-foot">
+      <details class="dash-foot">
+        <summary>Session options</summary>
+        <div class="dash-foot-actions">
         <button onClick={() => confirmSend('Reset this section back to an empty lobby? All groups and scores are cleared.', { t: 'session:reset' })}>Reset session</button>
         <button class="danger" onClick={() => confirmSend('Permanently delete all data for this section (groups, questions, answers)? This cannot be undone.', { t: 'session:delete' })}>
           Delete session data
         </button>
-      </footer>
+        </div>
+      </details>
       <Toast msg={room.error} />
     </div>
   );
@@ -271,18 +285,22 @@ function MatchCard({ m, v, send, stale }: { m: InstructorMatchView; v: Instructo
   const active = v.phase === 'round1_active' || v.phase === 'round2_active';
   return (
     <div class={`card match ${stale && active ? 'alert' : ''}`}>
-      <div class="row-between">
-        <div>
-          <b>{m.interrogatorName}</b> asks → {m.responderName}
-          {m.oddGroup && <span class="chip">odd group</span>}
-          {m.late && <span class="chip">late</span>}
+      <div class="match-head">
+        <div class="match-names">
+          <b>{m.interrogatorName}</b>
+          <span class="arrow" aria-label="asks">→</span>
+          <span>{m.responderName}</span>
         </div>
-        <span class="chip">{m.status}</span>
+        <span class={`chip status ${m.status.replace(/\s+/g, '-')}`}>{m.status}</span>
       </div>
-      <div class="small muted">{m.exchanges.filter((e) => e.state === 'released').length} answered · {m.exchanges.length} asked</div>
+      <div class="match-meta small muted">
+        {m.exchanges.filter((e) => e.state === 'released').length} answered · {m.exchanges.length} asked
+        {m.oddGroup && <span class="chip">odd group</span>}
+        {m.late && <span class="chip">late</span>}
+      </div>
       {stale && active && <div class="small warn">⚠ Responder group has no heartbeat for 45 s+</div>}
       {m.takenOverBy && <div class="small">Taken over by {v.instructors.find((i) => i.id === m.takenOverBy)?.name}</div>}
-      <div class="actions">
+      <div class="actions match-actions">
         {m.responderType === 'group' &&
           active &&
           (m.takenOverBy ? (
@@ -309,7 +327,7 @@ function MyQueue({ v, room }: { v: InstructorView; room: Room<InstructorView> })
   if (!mineMatches.length && !unassigned.length) return null;
   return (
     <div class="card queue">
-      <h3>You answer ({queue.length} waiting)</h3>
+      <h2 class="panel-title">You answer ({queue.length} waiting)</h2>
       {unassigned.length > 0 && <p class="warn small">{unassigned.length} instructor match(es) have no instructor. Claim them in Matches.</p>}
       {queue.length === 0 && <p class="muted small">No questions waiting. Your matches: {mineMatches.map((m) => m.interrogatorName).join(', ')}</p>}
       {queue.map(({ e, m }) => (
@@ -350,16 +368,17 @@ function Feed({ matches, send, groupName, canBlock }: { matches: InstructorMatch
             <span>
               {new Date(e.createdAt).toLocaleTimeString()} · {groupName(m.interrogatorId)}
             </span>
-            <span class="chip">{e.state}{e.blockedBy === 'llm' ? ' (AI)' : ''}</span>
+            <span class={`chip status ${e.state}`}>{e.state}{e.blockedBy === 'llm' ? ' (AI)' : ''}</span>
           </div>
           <div class="q">
             <Highlight text={e.question} terms={e.flags} />
           </div>
           {(e.humanText || e.llmText) && (
-            <div class="small muted">
-              {e.humanText && <div>Human: {e.humanText}</div>}
-              {e.llmText && <div>AI: {e.llmText}</div>}
-            </div>
+            <details class="feed-answers small">
+              <summary>Show answers</summary>
+              {e.humanText && <div><b>Human:</b> {e.humanText}</div>}
+              {e.llmText && <div><b>AI:</b> {e.llmText}</div>}
+            </details>
           )}
           {canBlock && (e.state === 'pending' || e.state === 'released') && (
             // The feed grows at the top while you aim, so confirm which question is being blocked.

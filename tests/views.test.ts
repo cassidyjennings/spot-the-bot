@@ -61,3 +61,18 @@ describe('reveal gating', () => {
     expect(v.stats?.r1?.scored).toBe(3);
   });
 });
+
+describe('projector leaderboard', () => {
+  it('is empty during a round and ranks every group after the Round 1 reveal', () => {
+    const h = lobby(4, 3);
+    h.engine.handle(h.I, { t: 'round:start' });
+    playSomeExchanges(h);
+    expect(displayView(h.engine.s, h.now()).leaderboard).toEqual([]);
+    h.engine.handle(h.I, { t: 'round:end' });
+    h.engine.handle(h.I, { t: 'round:reveal' });
+    const lb = displayView(h.engine.s, h.now()).leaderboard;
+    expect(lb.map((r) => r.name).sort()).toEqual(h.groups.map((g) => g.name).sort());
+    expect(lb.every((r) => r.r2 === null)).toBe(true);
+    for (let i = 1; i < lb.length; i++) expect(lb[i - 1].total).toBeGreaterThanOrEqual(lb[i].total);
+  });
+});

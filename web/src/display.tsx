@@ -12,6 +12,39 @@ const TITLES: Record<string, string> = {
   ended: 'Final results',
 };
 
+function Leaderboard({ rows }: { rows: DisplayView['leaderboard'] }) {
+  const two = rows.some((r) => r.r2 !== null);
+  const f = (x: number) => (x > 0 ? `+${x.toFixed(2)}` : x.toFixed(2));
+  return (
+    <div class="card leaderboard">
+      <h2>Leaderboard</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Group</th>
+            <th>Round 1</th>
+            {two && <th>Round 2</th>}
+            {two && <th>Total</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(0, 10).map((r, i) => (
+            <tr class={i === 0 ? 'first' : ''}>
+              <td>{i + 1}</td>
+              <td>{r.name}</td>
+              <td>{f(r.r1)}</td>
+              {two && <td>{r.r2 === null ? '–' : f(r.r2)}</td>}
+              {two && <td><b>{f(r.total)}</b></td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length > 10 && <p class="muted small">Top 10 of {rows.length} groups</p>}
+    </div>
+  );
+}
+
 export function DisplayApp({ sid }: { sid: string | null }) {
   const token = sid ? load<string>(`stb.inst.${sid}`) : null;
   const room = useRoom<DisplayView>(token ? sid : null, () => ({ t: 'display:rejoin', token: token! }), () => {}, () => {});
@@ -37,6 +70,7 @@ export function DisplayApp({ sid }: { sid: string | null }) {
           {v.phase === 'round1_active' && <p class="muted">Interrogators: slide toward the answer you think is human.</p>}
         </>
       )}
+      {v.leaderboard.length > 0 && <Leaderboard rows={v.leaderboard} />}
       {(v.stats.r1 || v.stats.r2) && !active && <StatsBundleView stats={v.stats} />}
     </div>
   );

@@ -38,7 +38,7 @@ describe('exchange loop', () => {
     expect(['left', 'right']).toContain(ex.humanSide);
   });
 
-  it('records the slider at the next question; later edits do not change it', () => {
+  it('records the slider at the next question; later edits are ignored', () => {
     const h = lobby(2);
     h.engine.handle(h.I, { t: 'round:start' });
     const m = firstGroupMatch(h);
@@ -52,7 +52,7 @@ describe('exchange loop', () => {
     expect(e1.recordedGuess).toBe(0.7);
     expect(h.llm[1].history).toEqual([{ q: 'q1', a: 'b' }]); // LLM sees only its own answers
     h.engine.handle(G(m.interrogatorId), { t: 'guess:update', exchangeId: e1.id, v: -1 });
-    expect(e1.slider).toBe(-1);
+    expect(e1.slider).toBe(0.7); // locked: later edits are ignored
     expect(e1.recordedGuess).toBe(0.7);
   });
 
