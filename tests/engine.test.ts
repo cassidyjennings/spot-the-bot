@@ -209,3 +209,37 @@ describe('leaving the game', () => {
     expect('group' in back && back.group.id).toBe(g.id);
   });
 });
+
+describe('instructor takeover and claim', () => {
+  it('takeover lets the instructor answer for a stalled group; first answer wins; give-back restores it', () => {
+    const h = lobby(2);
+    h.engine.handle(h.I, { t: 'round:start' });
+    const m = firstGroupMatch(h);
+    h.engine.handle(G(m.interrogatorId), { t: 'question:submit', text: 'q1' });
+    const e = h.engine.s.exchanges[0];
+    expect(h.engine.handle(h.I, { t: 'match:takeover', matchId: m.id })).toBeUndefined();
+    expect(h.engine.handle(h.I, { t: 'answer:submit', exchangeId: e.id, text: 'from instructor' })).toBeUndefined();
+    expect(e.humanText).toBe('from instructor');
+    // first answer wins: the stalled group answering afterwards is rejected
+    expect(h.engine.handle(G(m.responderGroupId!), { t: 'answer:submit', exchangeId: e.id, text: 'too late' })).toBeTruthy();
+    expect(e.humanText).toBe('from instructor');
+    h.engine.llmResult(e.id, { kind: 'ok', text: 'bot' });
+    expect(e.state).toBe('released');
+    expect(h.engine.handle(h.I, { t: 'match:untakeover', matchId: m.id })).toBeUndefined();
+    h.engine.handle(G(m.interrogatorId), { t: 'question:submit', text: 'q2' });
+    const e2 = h.engine.s.exchanges[1];
+    expect(h.engine.handle(G(m.responderGroupId!), { t: 'answer:submit', exchangeId: e2.id, text: 'back to group' })).toBeUndefined();
+  });
+
+  it('the odd group plays an instructor who answers its questions', () => {
+    const h = lobby(3);
+    h.engine.handle(h.I, { t: 'round:start' });
+    const m = h.engine.currentMatches().find((x) => x.responderType === 'instructor')!;
+    expect(m).toBeTruthy();
+    h.engine.handle(G(m.interrogatorId), { t: 'question:submit', text: 'hello?' });
+    const e = h.engine.s.exchanges[0];
+    expect(h.engine.handle(h.I, { t: 'answer:submit', exchangeId: e.id, text: 'hi from teacher' })).toBeUndefined();
+    h.engine.llmResult(e.id, { kind: 'ok', text: 'hi from bot' });
+    expect(e.state).toBe('released');
+  });
+});

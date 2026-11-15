@@ -68,6 +68,16 @@ This prints `https://spot-the-bot.<you>.workers.dev`. Then edit `worker/wrangler
 
 Edit the AI's personality in `worker/prompts/persona.md`, then run `npm run deploy:worker`.
 
+## Live smoke test (real Gemini, deployed server)
+
+Run this from your own terminal after any deploy. Uses about 20 Gemini requests and resets the section when done. Use a section you aren't about to teach in.
+
+```bash
+npx tsx scripts/bots.ts --url wss://spot-the-bot.cassidyj.workers.dev --session s4 --password <section 4 password> --instructor-password <instructor password> --n 3 --drive --round-min 0.5
+```
+
+Healthy output: `void 0`, `blocked 0`, `unexpected: 0`. Any voided question means Gemini failed (wrong `LLM_MODEL`, bad key, or rate limit); the dashboard alert shows the HTTP code.
+
 ## How it behaves (quick reference)
 
 - The server holds both answers and releases them together, putting the human answer on a random side. Phones never learn which side is human until the reveal.

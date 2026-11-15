@@ -15,6 +15,7 @@ export function StudentApp() {
   const [saved, setSaved] = useState<Saved | null>(() => load<Saved>(KEY));
   const [joinReq, setJoinReq] = useState<{ sessionId: string; password: string; name: string } | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const leaving = useRef(false); // our own Leave game triggers a "signed out" kick that shouldn't show as an error
   const sessionId = saved?.sessionId ?? joinReq?.sessionId ?? null;
 
   const room = useRoom<GroupView>(
@@ -30,7 +31,8 @@ export function StudentApp() {
       save(KEY, null);
       setSaved(null);
       setJoinReq(null);
-      setJoinError(msg);
+      setJoinError(leaving.current ? null : msg);
+      leaving.current = false;
     },
   );
 
@@ -52,10 +54,12 @@ export function StudentApp() {
             class="small leave"
             onClick={() => {
               if (!confirm('Leave the game? Your group can rejoin later with the same name and password.')) return;
+              leaving.current = true;
               room.send({ t: 'group:leave' });
               setTimeout(() => {
                 save(KEY, null);
                 setSaved(null);
+                leaving.current = false;
               }, 300);
             }}
           >
