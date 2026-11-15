@@ -36,7 +36,7 @@ export function Timer({ v, offset, big }: { v: ClockLike; offset: number; big?: 
   const ended = ms <= 0 && !paused;
   return (
     <div class={`timer ${big ? 'big' : ''} ${ms < 30_000 && !paused ? 'low' : ''}`} aria-live="off">
-      {paused ? `⏸ ${fmt(ms)}` : ended ? "Time's up" : fmt(ms)}
+      {paused ? `Paused ${fmt(ms)}` : ended ? "Time's up" : fmt(ms)}
     </div>
   );
 }
@@ -104,9 +104,9 @@ export function GuessSlider({
         />
       </div>
       <div class="guess-labels">
-        <span>⬅ Left is human</span>
+        <span>Left is human</span>
         <span>not sure</span>
-        <span>Right is human ➡</span>
+        <span>Right is human</span>
       </div>
     </div>
   );

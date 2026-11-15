@@ -89,7 +89,6 @@ function Body({ v, room }: { v: GroupView; room: Room<GroupView> }) {
   if (v.phase === 'lobby')
     return (
       <div class="center grow">
-        <div class="big-emoji">🤖❓</div>
         <h2>You're in!</h2>
         <p>{v.groupCount} group{v.groupCount === 1 ? '' : 's'} joined. Waiting for the instructor to start.</p>
       </div>
@@ -126,7 +125,7 @@ function Join({ error, onJoin }: { error: string | null; onJoin: (r: { sessionId
   return (
     <div class="screen center">
       <div class="join card">
-        <h1>Spot the Bot 🤖</h1>
+        <h1>Spot the Bot</h1>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -360,7 +359,7 @@ function RevealCard({ e, role }: { e: RevealExchangeView; role: 'interrogator' |
   // From the responder's view, a negative s means they fooled the interrogators.
   const s = e.s ?? 0;
   const verdict =
-    s === 0 ? 'No guess' : role === 'interrogator' ? (s > 0 ? '✓ Correct' : '✗ Fooled') : s < 0 ? '✓ You fooled them' : '✗ They spotted you';
+    s === 0 ? 'No guess' : role === 'interrogator' ? (s > 0 ? 'Correct' : 'Fooled') : s < 0 ? 'You fooled them' : 'They spotted you';
   const good = role === 'interrogator' ? s > 0 : s < 0;
   return (
     <div class="card exchange">

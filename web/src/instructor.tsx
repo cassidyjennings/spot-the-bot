@@ -187,7 +187,7 @@ function Dashboard({ v, room, sections, sid, onSwitch }: { v: InstructorView; ro
             </>
           )}
           {v.phase === 'round2_reveal' && <button class="primary" onClick={() => send({ t: 'game:end' })}>End game · show final</button>}
-          <a class="button" href={`#/display?s=${sid}`} target="_blank" rel="noopener">Projector view ↗</a>
+          <a class="button" href={`#/display?s=${sid}`} target="_blank" rel="noopener">Projector view</a>
         </div>
       </header>
 
@@ -292,7 +292,7 @@ function MatchCard({ m, v, send, stale }: { m: InstructorMatchView; v: Instructo
       <div class="match-head">
         <div class="match-names">
           <b>{m.interrogatorName}</b>
-          <span class="arrow" aria-label="asks">→</span>
+          <span class="arrow">asks</span>
           <span>{m.responderName}</span>
         </div>
         <span class={`chip status ${m.status.replace(/\s+/g, '-')}`}>{m.status}</span>
@@ -302,7 +302,7 @@ function MatchCard({ m, v, send, stale }: { m: InstructorMatchView; v: Instructo
         {m.oddGroup && <span class="chip">odd group</span>}
         {m.late && <span class="chip">late</span>}
       </div>
-      {stale && active && <div class="small warn">⚠ Responder group has no heartbeat for 45 s+</div>}
+      {stale && active && <div class="small warn">Responder group has no heartbeat for 45 s+</div>}
       {m.takenOverBy && <div class="small">Taken over by {v.instructors.find((i) => i.id === m.takenOverBy)?.name}</div>}
       <div class="actions match-actions">
         {m.responderType === 'group' &&
