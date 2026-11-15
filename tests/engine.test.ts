@@ -197,3 +197,15 @@ describe('timer and phases', () => {
     expect(groupView(h.engine.s, r.group.id, h.now()).role).toBe('interrogator');
   });
 });
+
+describe('leaving the game', () => {
+  it('frees the name and invalidates the old token; the group can rejoin', () => {
+    const h = lobby(2);
+    const g = h.groups[0];
+    const oldToken = g.token;
+    expect(h.engine.handle(G(g.id), { t: 'group:leave' })).toBeUndefined();
+    expect(h.engine.groupByToken(oldToken)).toBeUndefined();
+    const back = h.engine.joinGroup(g.name);
+    expect('group' in back && back.group.id).toBe(g.id);
+  });
+});

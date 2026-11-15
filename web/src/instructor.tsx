@@ -140,6 +140,10 @@ function Dashboard({ v, room, sections, sid, onSwitch }: { v: InstructorView; ro
   return (
     <div class="screen dash">
       <ConnBadge connected={room.connected} />
+      <div class="dash-brand">
+        <h1>Spot the Bot</h1>
+        <span class="muted">Instructor dashboard</span>
+      </div>
       <header class="dash-top">
         <div class="dash-title">
           <select value={sid} onChange={(e) => onSwitch((e.target as HTMLSelectElement).value)} aria-label="Section">

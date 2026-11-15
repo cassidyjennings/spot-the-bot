@@ -136,6 +136,7 @@ export type ClientMsg =
   | { t: 'question:submit'; text: string }
   | { t: 'answer:submit'; exchangeId: string; text: string }
   | { t: 'guess:update'; exchangeId: string; v: number }
+  | { t: 'group:leave' }
   // instructor
   | { t: 'config:set'; roundMinutes: number }
   | { t: 'round:start' }

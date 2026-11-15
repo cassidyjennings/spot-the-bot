@@ -152,6 +152,15 @@ export class Engine {
           return this.submitAnswer(actor, msg.exchangeId, msg.text);
         case 'guess:update':
           return this.updateGuess(actor.id, msg.exchangeId, msg.v);
+        case 'group:leave': {
+          // Same effect as an instructor's "Release name": the name frees up and the group can rejoin.
+          const g = this.s.groups.find((x) => x.id === actor.id);
+          if (!g) return 'No such group.';
+          g.released = true;
+          g.connected = false;
+          g.token = this.d.token();
+          return;
+        }
         default:
           return 'Not allowed.';
       }

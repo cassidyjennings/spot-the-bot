@@ -46,7 +46,22 @@ export function StudentApp() {
           <div class="group-name">{v.me.name}</div>
           <div class="muted small">{roleLabel(v)}</div>
         </div>
-        <Timer v={v} offset={room.offset} />
+        <div class="topbar-right">
+          <Timer v={v} offset={room.offset} />
+          <button
+            class="small leave"
+            onClick={() => {
+              if (!confirm('Leave the game? Your group can rejoin later with the same name and password.')) return;
+              room.send({ t: 'group:leave' });
+              setTimeout(() => {
+                save(KEY, null);
+                setSaved(null);
+              }, 300);
+            }}
+          >
+            Leave game
+          </button>
+        </div>
       </header>
       {v.pausedRemaining !== null && <div class="banner">Paused by the instructor</div>}
       <Body v={v} room={room} />
