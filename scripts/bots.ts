@@ -114,6 +114,8 @@ if (DRIVE) {
         const totals = Object.values(v.scores).reduce((a, s) => a + s.r1 + s.r2, 0);
         console.log('--- summary ---');
         console.log(`exchanges: ${exs.length} (released ${exs.filter((e) => e.state === 'released').length}, void ${exs.filter((e) => e.state === 'void').length}, blocked ${exs.filter((e) => e.state === 'blocked').length})`);
+        const byInstructor = v.matches.filter((x) => x.interrogatorType === 'instructor').flatMap((x) => x.exchanges);
+        console.log(`instructor-asked exchanges: ${byInstructor.length} (released ${byInstructor.filter((e) => e.state === 'released').length})`);
         console.log(`scored ${all.scored}, correct ${pct(all.pctCorrect)}, LLM judged human ${pct(all.pctLlmJudgedHuman)}`);
         console.log(`sum of group scores (non-zero only from instructor matches): ${totals.toFixed(2)}`);
         console.log(`errors: ${errors} total, unexpected: ${unexpected.length}`);
@@ -129,12 +131,32 @@ if (DRIVE) {
     { t: 'instructor:login', password: INSTRUCTOR_PW, name: 'Bot instructor' },
     'instructor',
   );
-  // The bot instructor answers questions in instructor-responder matches.
+  // The bot instructor answers questions in instructor-responder matches, and asks + judges in
+  // instructor-interrogator matches (the odd group's answering turn).
   const answered = new Set<string>();
+  const scheduledIq = new Set<string>();
+  const askingNow = new Set<string>();
   inst.addEventListener('message', (ev) => {
     const m = JSON.parse(String(ev.data));
     if (m.t !== 'snapshot') return;
-    for (const match of (m.view as InstructorView).matches) {
+    const iv = m.view as InstructorView;
+    const live = iv.roundEndsAt !== null && iv.pausedRemaining === null && iv.serverNow < iv.roundEndsAt;
+    for (const match of iv.matches) {
+      if (match.round !== iv.round || match.interrogatorType !== 'instructor' || match.instructorId !== iv.me.id) continue;
+      const last = match.exchanges[match.exchanges.length - 1];
+      if (last?.state === 'released' && last.recordedGuess === null && !scheduledIq.has(last.id)) {
+        scheduledIq.add(last.id);
+        setTimeout(() => inst.send(JSON.stringify({ t: 'iguess:update', exchangeId: last.id, v: Math.round((Math.random() * 2 - 1) * 100) / 100 })), delay(500, 2500));
+      }
+      if (last?.state !== 'pending' && live && !askingNow.has(match.id)) {
+        askingNow.add(match.id);
+        setTimeout(() => {
+          askingNow.delete(match.id);
+          inst.send(JSON.stringify({ t: 'iq:submit', matchId: match.id, text: pick(QUESTIONS) }));
+        }, delay(3000, 8000));
+      }
+    }
+    for (const match of iv.matches) {
       if (match.responderType !== 'instructor') continue;
       for (const e of match.exchanges) {
         if (e.state === 'pending' && e.humanText === undefined && !answered.has(e.id)) {

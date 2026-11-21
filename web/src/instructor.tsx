@@ -1,9 +1,9 @@
 // Instructor dashboard (laptop).
 import { useEffect, useState } from 'preact/hooks';
-import { MAX_ANSWER, STALE_MS } from '../../shared/types';
+import { MAX_ANSWER, MAX_QUESTION, STALE_MS } from '../../shared/types';
 import type { InstructorMatchView, InstructorView } from '../../shared/views';
 import { fetchSections, load, save, useRoom, type Room, type Section } from './net';
-import { ConnBadge, StatsBundleView, Timer, Toast, remainingMs, useNow } from './ui';
+import { ConnBadge, GuessSlider, StatsBundleView, Timer, Toast, remainingMs, useNow } from './ui';
 
 const tokenKey = (sid: string) => `stb.inst.${sid}`;
 const CREDS = 'stb.instCreds'; // sessionStorage only: cleared when the tab closes
@@ -127,7 +127,6 @@ function Dashboard({ v, room, sections, sid, onSwitch }: { v: InstructorView; ro
   const ms = remainingMs(v, room.offset, now);
   const timerDone = active && ms !== null && ms <= 0 && v.pausedRemaining === null;
   const current = v.matches.filter((m) => m.round === v.round);
-  const groupName = (id: string) => v.groups.find((g) => g.id === id)?.name ?? '?';
   const stale = (g: { connected: boolean; lastSeen: number }) => !g.connected || serverNow - g.lastSeen > STALE_MS;
   const [minutes, setMinutes] = useState(String(v.config.roundMs / 60000));
   const [tab, setTab] = useState<'matches' | 'groups' | 'stats'>('matches');
@@ -208,6 +207,7 @@ function Dashboard({ v, room, sections, sid, onSwitch }: { v: InstructorView; ro
       )}
 
       <MyQueue v={v} room={room} />
+      <MyQuestions v={v} room={room} />
 
       <div class="dash-grid">
         <section class="panel">
@@ -266,7 +266,7 @@ function Dashboard({ v, room, sections, sid, onSwitch }: { v: InstructorView; ro
 
         <section class="panel">
           <h2 class="panel-title">Question feed</h2>
-          <Feed matches={current} send={send} groupName={groupName} canBlock={active} />
+          <Feed matches={current} send={send} myId={v.me.id} canBlock={active} />
         </section>
       </div>
 
@@ -312,8 +312,10 @@ function MatchCard({ m, v, send, stale }: { m: InstructorMatchView; v: Instructo
           ) : (
             <button class="small" onClick={() => send({ t: 'match:takeover', matchId: m.id })}>Take over</button>
           ))}
-        {m.responderType === 'instructor' && !mine && active && (
-          <button class="small" onClick={() => send({ t: 'match:claim', matchId: m.id })}>Claim (answer as me)</button>
+        {(m.responderType === 'instructor' || m.interrogatorType === 'instructor') && !mine && active && (
+          <button class="small" onClick={() => send({ t: 'match:claim', matchId: m.id })}>
+            {m.interrogatorType === 'instructor' ? 'Claim (ask as me)' : 'Claim (answer as me)'}
+          </button>
         )}
       </div>
     </div>
@@ -341,6 +343,62 @@ function MyQueue({ v, room }: { v: InstructorView; room: Room<InstructorView> })
   );
 }
 
+/** Matches where this instructor types the questions and judges (the odd group's answering turn). */
+function MyQuestions({ v, room }: { v: InstructorView; room: Room<InstructorView> }) {
+  const active = v.phase === 'round1_active' || v.phase === 'round2_active';
+  const asking = v.matches.filter((m) => m.round === v.round && m.interrogatorType === 'instructor');
+  if (!active || !asking.length) return null;
+  const mine = asking.filter((m) => m.instructorId === v.me.id);
+  const others = asking.length - mine.length;
+  return (
+    <div class="card queue">
+      <h2 class="panel-title">You ask ({mine.length})</h2>
+      {others > 0 && <p class="warn small">{others} question match(es) belong to another instructor or none. Claim them in Matches.</p>}
+      {mine.map((m) => (
+        <AskBox key={m.id} m={m} room={room} />
+      ))}
+    </div>
+  );
+}
+
+function AskBox({ m, room }: { m: InstructorMatchView; room: Room<InstructorView> }) {
+  const [q, setQ] = useState('');
+  const last = m.exchanges[m.exchanges.length - 1];
+  const pending = last?.state === 'pending';
+  const judging = last?.state === 'released' && last.recordedGuess === null;
+  // Same blind layout the groups get: human side is random, labels stay hidden until the reveal.
+  const left = last?.humanSide === 'left' ? last.humanText : last?.llmText;
+  const right = last?.humanSide === 'left' ? last?.llmText : last?.humanText;
+  return (
+    <div class="answer-box">
+      <div class="small muted">Group: {m.responderName} · {m.exchanges.length} asked</div>
+      {pending && <div class="muted waiting-dots small">{(last.answerFlags ?? 0) > 0 ? 'Group is rewriting an answer' : 'Waiting for both answers'}</div>}
+      {last && (last.state === 'blocked' || last.state === 'void') && <div class="warn small">Last question was {last.state}. Ask another.</div>}
+      {judging && (
+        <>
+          <div class="answers">
+            <div class="answer"><div class="side">Left</div>{left}</div>
+            <div class="answer"><div class="side">Right</div>{right}</div>
+          </div>
+          <p class="hint">Which answer is the <b>human</b>? Slide toward it. Asking the next question locks your guess.</p>
+          <GuessSlider value={last.slider} ghost={null} onChange={(val) => room.send({ t: 'iguess:update', exchangeId: last.id, v: val })} />
+        </>
+      )}
+      <form
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          if (!q.trim()) return;
+          room.send({ t: 'iq:submit', matchId: m.id, text: q });
+          setQ('');
+        }}
+      >
+        <textarea rows={2} maxLength={MAX_QUESTION} value={q} disabled={pending} placeholder={pending ? 'Waiting for answers…' : 'Type your question…'} onInput={(e) => setQ((e.target as HTMLTextAreaElement).value)} />
+        <button class="primary small" type="submit" disabled={pending || !q.trim()}>Ask</button>
+      </form>
+    </div>
+  );
+}
+
 function AnswerBox({ label, question, onSend }: { label: string; question: string; onSend: (t: string) => void }) {
   const [a, setA] = useState('');
   return (
@@ -359,7 +417,7 @@ function AnswerBox({ label, question, onSend }: { label: string; question: strin
   );
 }
 
-function Feed({ matches, send, groupName, canBlock }: { matches: InstructorMatchView[]; send: Room<InstructorView>['send']; groupName: (id: string) => string; canBlock: boolean }) {
+function Feed({ matches, send, myId, canBlock }: { matches: InstructorMatchView[]; send: Room<InstructorView>['send']; myId: string; canBlock: boolean }) {
   const items = matches
     .flatMap((m) => m.exchanges.map((e) => ({ e, m })))
     .sort((a, b) => b.e.createdAt - a.e.createdAt);
@@ -370,14 +428,15 @@ function Feed({ matches, send, groupName, canBlock }: { matches: InstructorMatch
         <div class={`card feed-item ${e.flags.length ? 'flagged' : ''} ${e.state}`}>
           <div class="row-between small muted">
             <span>
-              {new Date(e.createdAt).toLocaleTimeString()} · {groupName(m.interrogatorId)}
+              {new Date(e.createdAt).toLocaleTimeString()} · {m.interrogatorName}
             </span>
             <span class={`chip status ${e.state}`}>{e.state}{e.blockedBy === 'llm' ? ' (AI)' : ''}</span>
           </div>
           <div class="q">
             <Highlight text={e.question} terms={e.flags} />
           </div>
-          {(e.humanText || e.llmText) && (
+          {/* Don't hand the answer key to the instructor who is judging this exchange. */}
+          {(e.humanText || e.llmText) && !(canBlock && m.interrogatorType === 'instructor' && m.instructorId === myId && e.recordedGuess === null) && (
             <details class="feed-answers small">
               <summary>Show answers</summary>
               {e.humanText && <div><b>Human:</b> {e.humanText}</div>}

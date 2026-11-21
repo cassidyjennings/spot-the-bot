@@ -5,14 +5,15 @@ import { mulberry32 } from './helpers';
 const inst = { connected: ['i1', 'i2'], all: ['i1', 'i2'] };
 
 function rolesOf(plans: ReturnType<typeof planRound1>) {
-  const interrog = plans.map((p) => p.interrogatorId);
+  // Matches where an instructor asks have no interrogator group.
+  const interrog = plans.filter((p) => p.interrogatorType !== 'instructor').map((p) => p.interrogatorId);
   const resp = plans.filter((p) => p.responderType === 'group').map((p) => p.responderGroupId!);
   return { interrog, resp, all: [...interrog, ...resp] };
 }
 
 describe('matching', () => {
   for (let n = 1; n <= 12; n++) {
-    it(`n=${n}: every group plays, roles swap, odd group plays an instructor twice`, () => {
+    it(`n=${n}: every group plays, roles swap, odd group asks an instructor then answers one`, () => {
       for (let seed = 1; seed <= 20; seed++) {
         const rng = mulberry32(seed * 31 + n);
         const ids = Array.from({ length: n }, (_, i) => `g${i}`);
@@ -31,9 +32,25 @@ describe('matching', () => {
         for (const id of a.resp) expect(b.interrog).toContain(id);
         for (const p of r1.filter((p) => !p.oddGroup)) expect(b.resp).toContain(p.interrogatorId);
         for (const p of odd1) {
-          const m = r2.find((x) => x.interrogatorId === p.interrogatorId)!;
-          expect(m.responderType).toBe('instructor');
+          // the odd group answers an instructor's questions instead of asking again
+          const m = r2.find((x) => x.responderGroupId === p.interrogatorId)!;
+          expect(m.interrogatorType).toBe('instructor');
+          expect(m.responderType).toBe('group');
           expect(m.oddGroup).toBe(true);
+          expect(b.interrog).not.toContain(p.interrogatorId);
+        }
+        // everyone asks exactly once and answers exactly once across the two rounds (n >= 2)
+        if (n >= 2) {
+          const asked = new Map<string, number>();
+          const answered = new Map<string, number>();
+          for (const p of [...r1, ...r2]) {
+            if (p.interrogatorType !== 'instructor') asked.set(p.interrogatorId, (asked.get(p.interrogatorId) ?? 0) + 1);
+            if (p.responderType === 'group') answered.set(p.responderGroupId!, (answered.get(p.responderGroupId!) ?? 0) + 1);
+          }
+          for (const id of ids) {
+            expect(asked.get(id)).toBe(1);
+            expect(answered.get(id)).toBe(1);
+          }
         }
         if (n >= 4) {
           const prev = new Set(r1.filter((p) => p.responderGroupId).map((p) => [p.interrogatorId, p.responderGroupId].sort().join()));

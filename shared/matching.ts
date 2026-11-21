@@ -45,6 +45,24 @@ function instructorMatch(
   };
 }
 
+/** An instructor asks (types live) and judges; the group answers next to the AI. Gives the odd group an answering turn. */
+function instructorAsksMatch(
+  round: Round,
+  responderGroupId: string,
+  plans: MatchPlan[],
+  inst: { connected: string[]; all: string[] },
+): MatchPlan {
+  return {
+    round,
+    interrogatorId: '',
+    interrogatorType: 'instructor',
+    responderType: 'group',
+    responderGroupId,
+    instructorId: pickInstructor(plans, inst.connected, inst.all),
+    oddGroup: true,
+  };
+}
+
 /** Round 1: first ceil(n/2) shuffled groups interrogate; an odd one out plays an instructor. */
 export function planRound1(
   groupIds: string[],
@@ -70,7 +88,8 @@ export function planRound1(
 
 /**
  * Round 2: roles swap. Former group responders interrogate former interrogators.
- * The odd group and anyone who missed Round 1 interrogate an instructor.
+ * The odd group (which interrogated an instructor in Round 1) now answers an instructor's questions,
+ * so every group both asks and answers. Anyone who missed Round 1 interrogates an instructor.
  * If removals unbalance the pools, leftovers on either side interrogate an instructor,
  * so no present group is idle.
  */
@@ -94,8 +113,9 @@ export function planRound2(
 
   const newInterrogators = presentGroupIds.filter((id) => r1Responders.has(id));
   const newResponders = presentGroupIds.filter((id) => r1Interrogators.has(id) && !oddIds.has(id));
+  const oddResponders = presentGroupIds.filter((id) => oddIds.has(id));
   const toInstructor = presentGroupIds.filter(
-    (id) => oddIds.has(id) || (!r1Interrogators.has(id) && !r1Responders.has(id)),
+    (id) => !oddIds.has(id) && !r1Interrogators.has(id) && !r1Responders.has(id),
   );
 
   // Try a few shuffles to avoid repeating a Round 1 pair (only possible with enough groups).
@@ -121,9 +141,10 @@ export function planRound2(
   for (let i = 0; i < pairs; i++) {
     plans.push({ round: 2, interrogatorId: ints[i], responderType: 'group', responderGroupId: best[i], oddGroup: false });
   }
+  for (const id of oddResponders) plans.push(instructorAsksMatch(2, id, plans, inst));
   const leftovers = [...ints.slice(pairs), ...best.slice(pairs)];
   for (const id of [...toInstructor, ...leftovers]) {
-    if (present.has(id)) plans.push(instructorMatch(2, id, plans, inst, oddIds.has(id)));
+    if (present.has(id)) plans.push(instructorMatch(2, id, plans, inst, false));
   }
   return plans;
 }

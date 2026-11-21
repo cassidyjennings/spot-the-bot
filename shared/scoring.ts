@@ -20,12 +20,14 @@ export function groupScores(state: RoomState, round: Round): Map<string, number>
   const add = (id: string, x: number) => scores.set(id, (scores.get(id) ?? 0) + x);
   for (const m of state.matches) {
     if (m.round !== round) continue;
-    add(m.interrogatorId, 0);
+    // An instructor judging has no group score; the answering group still earns -s.
+    const groupAsks = m.interrogatorType !== 'instructor';
+    if (groupAsks) add(m.interrogatorId, 0);
     if (m.responderType === 'group' && m.responderGroupId) add(m.responderGroupId, 0);
     for (const e of exchangesOf(state, m)) {
       const s = scoreOf(e);
       if (s === null) continue;
-      add(m.interrogatorId, s);
+      if (groupAsks) add(m.interrogatorId, s);
       if (m.responderType === 'group' && m.responderGroupId) add(m.responderGroupId, -s);
     }
   }

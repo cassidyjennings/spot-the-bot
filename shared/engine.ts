@@ -166,7 +166,7 @@ export class Engine {
         case 'answer:submit':
           return this.submitAnswer(actor, msg.exchangeId, msg.text);
         case 'guess:update':
-          return this.updateGuess(actor.id, msg.exchangeId, msg.v);
+          return this.updateGuess(actor, msg.exchangeId, msg.v);
         case 'group:leave': {
           // Same effect as an instructor's "Release name": the name frees up and the group can rejoin.
           const g = this.s.groups.find((x) => x.id === actor.id);
@@ -213,15 +213,20 @@ export class Engine {
       case 'match:untakeover': {
         const m = this.s.matches.find((x) => x.id === msg.matchId);
         if (!m || m.responderType !== 'group') return 'No such group match.';
+        if (m.interrogatorType === 'instructor') return 'An instructor is already asking in this match.';
         m.takenOverBy = msg.t === 'match:takeover' ? me : undefined;
         return;
       }
       case 'match:claim': {
         const m = this.s.matches.find((x) => x.id === msg.matchId);
-        if (!m || m.responderType !== 'instructor') return 'No such instructor match.';
+        if (!m || (m.responderType !== 'instructor' && m.interrogatorType !== 'instructor')) return 'No such instructor match.';
         m.instructorId = me;
         return;
       }
+      case 'iq:submit':
+        return this.submitInstructorQuestion(me, msg.matchId, msg.text);
+      case 'iguess:update':
+        return this.updateGuess(actor, msg.exchangeId, msg.v);
       case 'late:match':
         return this.matchLateJoiner(msg.groupId, me);
       case 'group:release': {
@@ -406,12 +411,31 @@ export class Engine {
 
   // ---------- exchange loop ----------
 
-  private submitQuestion(groupId: string, raw: string): Result {
+  private askGuard(): Result {
     if (!isActive(this.s.phase)) return 'No round is running.';
     if (this.s.pausedRemaining !== null) return 'The game is paused.';
     if (this.timerEnded()) return "Time's up! No new questions.";
+  }
+
+  private submitQuestion(groupId: string, raw: string): Result {
+    const bad = this.askGuard();
+    if (bad) return bad;
     const m = this.currentMatches().find((x) => x.interrogatorId === groupId);
     if (!m) return "You're not asking questions this round.";
+    return this.askQuestion(m, raw);
+  }
+
+  /** An instructor types a question live in a match where an instructor asks (the odd group's answering turn). */
+  private submitInstructorQuestion(instructorId: string, matchId: string, raw: string): Result {
+    const bad = this.askGuard();
+    if (bad) return bad;
+    const m = this.currentMatches().find((x) => x.id === matchId && x.interrogatorType === 'instructor');
+    if (!m) return "That isn't one of your question matches this round.";
+    if (m.instructorId !== instructorId) return 'Claim this match first.';
+    return this.askQuestion(m, raw);
+  }
+
+  private askQuestion(m: Match, raw: string): Result {
     const text = cleanText(raw, MAX_QUESTION);
     if (!text) return 'Type a question first.';
     const exs = exchangesOf(this.s, m);
@@ -457,11 +481,15 @@ export class Engine {
     this.tryRelease(e);
   }
 
-  private updateGuess(groupId: string, exchangeId: string, v: number): Result {
+  private updateGuess(actor: Actor, exchangeId: string, v: number): Result {
     const e = this.exchange(exchangeId);
     if (!e || e.state !== 'released') return;
     const m = this.matchOf(e);
-    if (m.interrogatorId !== groupId || m.round !== this.s.round || !isActive(this.s.phase)) return;
+    const isAsker =
+      m.interrogatorType === 'instructor'
+        ? actor.role === 'instructor' && m.instructorId === actor.id
+        : actor.role === 'group' && m.interrogatorId === actor.id;
+    if (!isAsker || m.round !== this.s.round || !isActive(this.s.phase)) return;
     if (e.recordedGuess !== null) return; // locked once the next question is asked or the round ends
     const x = Number(v);
     if (!Number.isFinite(x)) return;

@@ -275,7 +275,8 @@ describe('timer and phases', () => {
     expect(h.engine.s.phase).toBe('round2_active');
     const r2 = h.engine.currentMatches();
     const odd = r1.find((m) => m.oddGroup)!;
-    expect(r2.find((m) => m.interrogatorId === odd.interrogatorId)?.responderType).toBe('instructor');
+    // the odd group answers an instructor's questions in Round 2, so everyone asks and answers once
+    expect(r2.find((m) => m.responderGroupId === odd.interrogatorId)?.interrogatorType).toBe('instructor');
     h.engine.handle(h.I, { t: 'round:end' });
     h.engine.handle(h.I, { t: 'game:end' });
     expect(h.engine.s.phase).toBe('ended');
@@ -332,6 +333,59 @@ describe('instructor takeover and claim', () => {
     h.engine.handle(G(m.interrogatorId), { t: 'question:submit', text: 'q2' });
     const e2 = h.engine.s.exchanges[1];
     expect(h.engine.handle(G(m.responderGroupId!), { t: 'answer:submit', exchangeId: e2.id, text: 'back to group' })).toBeUndefined();
+  });
+
+  it('Round 2: an instructor types questions live, judges, and the odd group answers', () => {
+    const h = lobby(3);
+    h.engine.handle(h.I, { t: 'round:start' });
+    h.engine.handle(h.I, { t: 'round:end' });
+    h.engine.handle(h.I, { t: 'round:start' });
+    const m = h.engine.currentMatches().find((x) => x.interrogatorType === 'instructor')!;
+    expect(m.interrogatorId).toBe('');
+    expect(m.instructorId).toBe(h.inst.id);
+    const odd = m.responderGroupId!;
+
+    // views: the answering group learns an instructor is asking; names stay hidden
+    const rv = groupView(h.engine.s, odd, h.now());
+    expect(rv.role).toBe('responder');
+    expect(rv.opponent).toBe('instructor');
+
+    // only the assigned instructor can ask; takeover is not offered here
+    const other = h.engine.loginInstructor('Other');
+    const O = { role: 'instructor' as const, id: other.id };
+    expect(h.engine.handle(O, { t: 'iq:submit', matchId: m.id, text: 'hi' })).toMatch(/Claim/);
+    expect(h.engine.handle(h.I, { t: 'match:takeover', matchId: m.id })).toMatch(/already asking/);
+    expect(h.engine.handle(G(odd), { t: 'iq:submit', matchId: m.id, text: 'hi' })).toBeTruthy(); // groups can't
+
+    expect(h.engine.handle(h.I, { t: 'iq:submit', matchId: m.id, text: 'favorite food?' })).toBeUndefined();
+    const e1 = h.engine.s.exchanges[0];
+    expect(h.llm.at(-1)!.question).toBe('favorite food?');
+    expect(h.engine.handle(h.I, { t: 'iq:submit', matchId: m.id, text: 'again' })).toMatch(/Wait/);
+    h.engine.handle(G(odd), { t: 'answer:submit', exchangeId: e1.id, text: 'pizza' });
+    h.engine.llmResult(e1.id, { kind: 'ok', text: 'tacos' });
+    expect(e1.state).toBe('released');
+
+    // the instructor judges; the asking group's message type and other groups can't move the slider
+    const correct = e1.humanSide === 'right' ? 0.6 : -0.6;
+    h.engine.handle(G(odd), { t: 'guess:update', exchangeId: e1.id, v: 1 });
+    expect(e1.slider).toBe(0);
+    h.engine.handle(O, { t: 'iguess:update', exchangeId: e1.id, v: 1 });
+    expect(e1.slider).toBe(0);
+    h.engine.handle(h.I, { t: 'iguess:update', exchangeId: e1.id, v: correct });
+    expect(e1.slider).toBe(correct);
+    h.engine.handle(h.I, { t: 'iq:submit', matchId: m.id, text: 'second?' });
+    expect(e1.recordedGuess).toBe(correct); // next question locks the guess
+
+    // a claimed match can be asked by the new instructor
+    h.engine.handle(O, { t: 'match:claim', matchId: m.id });
+    h.engine.llmResult(h.engine.s.exchanges[1].id, { kind: 'error', msg: 'x' }); // void it so a new question is allowed
+    expect(h.engine.handle(O, { t: 'iq:submit', matchId: m.id, text: 'from other' })).toBeUndefined();
+
+    // scoring: the answering group earns -s; no score entry for the missing asker
+    h.engine.handle(h.I, { t: 'round:end' });
+    const sc = groupScores(h.engine.s, 2);
+    expect(sc.has('')).toBe(false);
+    expect(sc.get(odd)).toBeCloseTo(-0.6);
   });
 
   it('the odd group plays an instructor who answers its questions', () => {

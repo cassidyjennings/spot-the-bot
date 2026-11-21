@@ -157,7 +157,7 @@ export class GameRoom extends DurableObject<Env> {
     const actor: Actor = { role: att.role, id: att.id };
     const err = e.handle(actor, msg);
     if (err) this.send(ws, { t: 'error', msg: err });
-    if (msg.t === 'guess:update' && !err) this.commitSlider(att);
+    if ((msg.t === 'guess:update' || msg.t === 'iguess:update') && !err) this.commitSlider(att);
     else this.commit();
   }
 

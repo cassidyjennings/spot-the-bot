@@ -34,10 +34,14 @@ export interface Instructor {
 export interface Match {
   id: string;
   round: Round;
+  /** The asking group. Empty when `interrogatorType` is 'instructor' (an instructor asks instead). */
   interrogatorId: string;
+  /** 'instructor' = an instructor types the questions and judges; only used so the odd group gets to answer. */
+  interrogatorType?: 'instructor';
   responderType: 'group' | 'instructor';
   responderGroupId?: string;
-  /** Assigned instructor for instructor-responder matches (may be unset if none was connected). */
+  /** Assigned instructor: answers (instructor-responder) or asks and judges (instructor-interrogator).
+   *  May be unset if none was connected. */
   instructorId?: string;
   /** Instructor answering in place of a stalled responder group. */
   takenOverBy?: string;
@@ -157,6 +161,8 @@ export type ClientMsg =
   | { t: 'match:untakeover'; matchId: string }
   | { t: 'match:claim'; matchId: string }
   | { t: 'late:match'; groupId: string }
+  | { t: 'iq:submit'; matchId: string; text: string } // instructor asks a question in their own match
+  | { t: 'iguess:update'; exchangeId: string; v: number } // instructor's slider in their own match
   | { t: 'group:release'; groupId: string }
   | { t: 'group:remove'; groupId: string }
   | { t: 'alerts:clear' };

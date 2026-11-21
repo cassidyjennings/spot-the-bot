@@ -268,7 +268,16 @@ function Responder({ v, room }: { v: GroupView; room: Room<GroupView> }) {
   return (
     <div class="grow">
       <div class="card intro">
-        Your answers appear next to an AI's answer. <b>Convince the other group you're the human.</b>
+        {v.opponent === 'instructor' ? (
+          <>
+            An instructor is asking you questions. Your answers appear next to an AI's answer.{' '}
+            <b>Convince them you're the human.</b>
+          </>
+        ) : (
+          <>
+            Your answers appear next to an AI's answer. <b>Convince the other group you're the human.</b>
+          </>
+        )}
       </div>
       {open ? (
         <form

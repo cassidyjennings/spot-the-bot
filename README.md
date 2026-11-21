@@ -85,7 +85,7 @@ Healthy output: `void 0`, `blocked 0`, `unexpected: 0`. Any voided question mean
 - The server holds both answers and releases them together, putting the human answer on a random side. Phones never learn which side is human until the reveal.
 - The slider is locked in (the grey "ghost" marker) when the group asks its next question or the round ends. Later moves are shown but not scored.
 - When the timer ends, a pending question gets a 60 s grace period. Once nothing is pending, the reveal happens 15 s after the last answer, so the group has time to set its slider.
-- Odd group count: one group interrogates an instructor in both rounds. Late joiners can be matched with an instructor ("Match with me"); otherwise they play an instructor in Round 2.
+- Odd group count: in Round 1 the odd group asks and an instructor answers. In Round 2 the roles flip: an instructor types the questions live (the **You ask** panel on the dashboard), the odd group answers next to the AI, and the instructor slides to judge. So every group both asks and answers. The instructor's slider isn't scored; the answering group still earns -s. Late joiners can be matched with an instructor ("Match with me"); otherwise they ask an instructor in Round 2.
 - Block (from an instructor, an AI `[[DECLINE]]`, or a Gemini safety filter) discards both answers. The asker sees "That question isn't allowed."
 - Lost phone: the instructor presses **Release name**, then the group rejoins with the same password and name and gets its history back.
 - Data: **Delete session data** wipes a section immediately. Sections auto-delete 7 days after their game ends.

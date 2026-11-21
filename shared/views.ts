@@ -188,7 +188,7 @@ export function groupView(s: RoomState, groupId: string, now: number): GroupView
       }));
     } else {
       base.role = 'responder';
-      base.opponent = 'group';
+      base.opponent = m.interrogatorType === 'instructor' ? 'instructor' : 'group';
       base.responding = exs
         .filter((e) => e.state === 'pending' || e.state === 'released')
         .map((e) => ({
@@ -216,7 +216,8 @@ export function groupView(s: RoomState, groupId: string, now: number): GroupView
     results.push({
       round: r,
       role: rm.interrogatorId === groupId ? 'interrogator' : 'responder',
-      opponent: rm.interrogatorId === groupId ? rm.responderType : 'group',
+      opponent:
+        rm.interrogatorId === groupId ? rm.responderType : rm.interrogatorType === 'instructor' ? 'instructor' : 'group',
       score: round2(score),
       exchanges: exchangesOf(s, rm).map((e) => ({
         idx: e.idx,
@@ -269,7 +270,7 @@ export function instructorView(s: RoomState, instructorId: string, now: number):
       const exs = exchangesOf(s, m);
       return {
         ...m,
-        interrogatorName: name(m.interrogatorId),
+        interrogatorName: m.interrogatorType === 'instructor' ? `Instructor: ${instName(m.instructorId)}` : name(m.interrogatorId),
         responderName: m.responderType === 'group' ? name(m.responderGroupId) : `Instructor: ${instName(m.instructorId)}`,
         status: matchStatus(s, m, exs),
         exchanges: exs.map((e) => ({ ...e, flags: flaggedTerms(e.question) })),
