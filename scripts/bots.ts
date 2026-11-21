@@ -13,6 +13,7 @@ const args = Object.fromEntries(
 );
 const URL_BASE = (args.url ?? 'ws://127.0.0.1:8787').replace(/\/$/, '');
 const SESSION = args.session ?? 's1';
+const ORIGIN = args.origin ?? 'https://cassidyjennings.github.io';
 const N = Number(args.n ?? 5);
 const PASSWORD = args.password ?? 'alpha';
 const DRIVE = args.drive === 'true';
@@ -34,7 +35,9 @@ const unexpected: string[] = [];
 const EXPECTED = [/no longer open/, /Time's up/, /Wait for both/, /No round is running/, /That round is over/];
 
 function connect(onMsg: (m: any, ws: WebSocket) => void, first: object, label: string): WebSocket {
-  const ws = new WebSocket(`${URL_BASE}/ws?session=${SESSION}`);
+  // The deployed worker rejects connections with no Origin header (ALLOWED_ORIGINS), and Node sends none.
+  // Node's built-in WebSocket accepts a headers option as its second argument.
+  const ws = new (WebSocket as any)(`${URL_BASE}/ws?session=${SESSION}`, { headers: { Origin: ORIGIN } }) as WebSocket;
   ws.addEventListener('open', () => ws.send(JSON.stringify(first)));
   ws.addEventListener('message', (ev) => {
     const m = JSON.parse(String(ev.data));
@@ -44,7 +47,11 @@ function connect(onMsg: (m: any, ws: WebSocket) => void, first: object, label: s
     }
     onMsg(m, ws);
   });
-  ws.addEventListener('error', () => unexpected.push(`${label}: socket error`));
+  ws.addEventListener('error', () => {
+    unexpected.push(`${label}: socket error`);
+    // A refused connection (wrong URL, or an Origin the server rejects) would otherwise exit silently.
+    console.error(`${label}: connection failed (check --url, --origin, and that the worker is deployed)`);
+  });
   return ws;
 }
 
