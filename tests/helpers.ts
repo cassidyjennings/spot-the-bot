@@ -1,4 +1,4 @@
-import { Engine, type LlmRequest } from '../shared/engine';
+import { Engine, type LlmRequest, type ModerationRequest } from '../shared/engine';
 import { newRoomState } from '../shared/types';
 
 export function mulberry32(seed: number) {
@@ -15,16 +15,25 @@ export function makeEngine(seed = 1) {
   let t = 1_000_000;
   let n = 0;
   const llm: LlmRequest[] = [];
-  const engine = new Engine(newRoomState('s1', 'Test'), {
+  const mod: ModerationRequest[] = [];
+  // Default: safety checks pass instantly. Set `h.autoMod.on = false` to answer them by hand.
+  const autoMod = { on: true };
+  const engine: Engine = new Engine(newRoomState('s1', 'Test'), {
     now: () => t,
     rng: mulberry32(seed),
     id: () => `id${++n}`,
     token: () => `tok${++n}`,
     requestLlm: (r) => llm.push(r),
+    requestModeration: (r) => {
+      mod.push(r);
+      if (autoMod.on) engine.moderationResult(r.exchangeId, { kind: 'ok' });
+    },
   });
   return {
     engine,
     llm,
+    mod,
+    autoMod,
     advance(ms: number) {
       t += ms;
       engine.tick();

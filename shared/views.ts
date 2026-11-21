@@ -24,6 +24,8 @@ export interface InterrogatorExchangeView {
   right?: string;
   slider: number;
   recordedGuess: number | null;
+  /** True while the other group is rewriting an answer that failed the safety check. */
+  retry?: boolean;
 }
 
 export interface ResponderExchangeView {
@@ -32,6 +34,8 @@ export interface ResponderExchangeView {
   question: string;
   answered: boolean;
   myAnswer?: string;
+  /** True when the last answer was rejected and needs rewriting. */
+  redo?: boolean;
 }
 
 export interface RevealExchangeView {
@@ -180,6 +184,7 @@ export function groupView(s: RoomState, groupId: string, now: number): GroupView
         ...sides(e),
         slider: e.slider,
         recordedGuess: e.recordedGuess,
+        retry: e.state === 'pending' && (e.answerFlags ?? 0) > 0,
       }));
     } else {
       base.role = 'responder';
@@ -192,6 +197,7 @@ export function groupView(s: RoomState, groupId: string, now: number): GroupView
           question: e.question,
           answered: e.humanText !== undefined,
           myAnswer: e.humanText,
+          redo: e.humanText === undefined && (e.answerFlags ?? 0) > 0,
         }));
     }
     return base;

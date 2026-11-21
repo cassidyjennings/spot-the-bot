@@ -226,7 +226,9 @@ function ExchangeCard({ e, isLatest, editable, onGuess }: { e: InterrogatorExcha
       <div class="q">
         <span class="qn">Q{e.idx}</span> {e.question}
       </div>
-      {e.state === 'pending' && <div class="muted waiting-dots">Waiting for both answers</div>}
+      {e.state === 'pending' && (
+        <div class="muted waiting-dots">{e.retry ? 'Just a few more seconds' : 'Waiting for both answers'}</div>
+      )}
       {e.state === 'blocked' && <div class="warn">That question isn't allowed. Ask something else.</div>}
       {e.state === 'void' && <div class="warn">Technical issue. Ask another question.</div>}
       {e.state === 'released' && (
@@ -278,6 +280,7 @@ function Responder({ v, room }: { v: GroupView; room: Room<GroupView> }) {
         >
           <div class="muted small">Question {open.idx}</div>
           <div class="q big">{open.question}</div>
+          {open.redo && <div class="warn">That answer wasn't allowed. Please write a different one.</div>}
           <textarea value={a} maxLength={MAX_ANSWER} rows={3} placeholder="Your group's answer…" onInput={(e) => setA((e.target as HTMLTextAreaElement).value)} />
           <button class="primary" type="submit" disabled={!a.trim()}>
             Send answer

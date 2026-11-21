@@ -31,17 +31,32 @@ export interface LlmRequest {
   question: string;
 }
 
+export type ModerationResult =
+  | { kind: 'ok' }
+  | { kind: 'flag' }
+  | { kind: 'error'; msg: string };
+
+export interface ModerationRequest {
+  exchangeId: string;
+  question: string;
+  text: string;
+}
+
 export interface EngineDeps {
   now(): number;
   rng(): number;
   id(): string;
   token(): string;
   requestLlm(req: LlmRequest): void;
+  /** Safety-check a student's answer. The result comes back through moderationResult(). */
+  requestModeration(req: ModerationRequest): void;
 }
 
 /** Wait this long after the last answer arrives (post-timer) so the slider can be set. */
 export const SLIDER_SETTLE_MS = 15_000;
 export const RETENTION_MS = 7 * 24 * 3600_000;
+/** A student answer may be flagged this many times before the question is voided. */
+export const MAX_ANSWER_FLAGS = 3;
 
 type Result = string | void; // string = error message for the sender
 
@@ -437,6 +452,8 @@ export class Engine {
     const text = cleanText(raw, MAX_ANSWER);
     if (!text) return 'Type an answer first.';
     e.humanText = text;
+    if (actor.role === 'instructor') e.humanChecked = true; // instructors are trusted
+    else this.d.requestModeration({ exchangeId: e.id, question: e.question, text });
     this.tryRelease(e);
   }
 
@@ -452,7 +469,7 @@ export class Engine {
   }
 
   private tryRelease(e: Exchange) {
-    if (e.state !== 'pending' || e.humanText === undefined || e.llmText === undefined) return;
+    if (e.state !== 'pending' || e.humanText === undefined || e.llmText === undefined || !e.humanChecked) return;
     e.humanSide = this.d.rng() < 0.5 ? 'left' : 'right';
     e.state = 'released';
     e.releasedAt = this.now();
@@ -490,6 +507,47 @@ export class Engine {
       e.llmText = r.text;
       this.tryRelease(e);
     }
+  }
+
+  /**
+   * Safety verdict on a student's answer.
+   * - flag: the answerer is asked to write a new answer (the AI answer is kept, the asker sees a short
+   *   wait message). After MAX_ANSWER_FLAGS flags the question is voided so it can't loop forever.
+   * - error: the question is voided (fail closed: unchecked text is never released).
+   */
+  moderationResult(exchangeId: string, r: ModerationResult) {
+    const e = this.exchange(exchangeId);
+    if (!e || e.state !== 'pending' || e.humanText === undefined || e.humanChecked) return;
+    if (r.kind === 'ok') {
+      e.humanChecked = true;
+      this.tryRelease(e);
+      return;
+    }
+    const shown = e.humanText.slice(0, 80);
+    delete e.humanText;
+    if (r.kind === 'flag') {
+      e.answerFlags = (e.answerFlags ?? 0) + 1;
+      if (e.answerFlags >= MAX_ANSWER_FLAGS) {
+        delete e.llmText;
+        e.state = 'void';
+        e.voidReason = 'answer';
+        this.alert(`Student answer flagged ${e.answerFlags} times, question voided. Last: "${shown}"`);
+      } else {
+        this.alert(`Student answer flagged, asked to rewrite: "${shown}"`);
+      }
+    } else {
+      delete e.llmText;
+      e.state = 'void';
+      e.voidReason = 'technical';
+      this.alert(`Safety check failed, question voided (${r.msg.slice(0, 120)})`);
+    }
+  }
+
+  /** Student answers still waiting on the safety check (re-queued after a server restart). */
+  pendingModeration(): ModerationRequest[] {
+    return this.s.exchanges
+      .filter((e) => e.state === 'pending' && e.humanText !== undefined && !e.humanChecked)
+      .map((e) => ({ exchangeId: e.id, question: e.question, text: e.humanText! }));
   }
 
   /** Exchanges still waiting on the LLM (used to re-queue after a server restart). */

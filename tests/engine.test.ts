@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MAX_ANSWER_FLAGS } from '../shared/engine';
 import { exchangeScore, groupScores } from '../shared/scoring';
 import { groupView } from '../shared/views';
 import { lobby } from './helpers';
@@ -95,6 +96,108 @@ describe('exchange loop', () => {
     h.engine.llmResult(e3.id, { kind: 'error', msg: 'timeout' });
     expect(e3.state).toBe('void');
     expect(h.engine.s.alerts.length).toBe(2);
+  });
+});
+
+describe('student answer safety check', () => {
+  function pendingAnswered() {
+    const h = lobby(2);
+    h.autoMod.on = false;
+    h.engine.handle(h.I, { t: 'round:start' });
+    const m = firstGroupMatch(h);
+    h.engine.handle(G(m.interrogatorId), { t: 'question:submit', text: 'q' });
+    const e = h.engine.s.exchanges[0];
+    h.engine.handle(G(m.responderGroupId!), { t: 'answer:submit', exchangeId: e.id, text: 'my answer' });
+    return { h, m, e };
+  }
+
+  it('holds the release until the check passes, even when the AI answer is ready', () => {
+    const { h, e } = pendingAnswered();
+    expect(h.mod).toEqual([{ exchangeId: e.id, question: 'q', text: 'my answer' }]);
+    h.engine.llmResult(e.id, { kind: 'ok', text: 'bot' });
+    expect(e.state).toBe('pending');
+    h.engine.moderationResult(e.id, { kind: 'ok' });
+    expect(e.state).toBe('released');
+  });
+
+  it('works when the check finishes before the AI answer', () => {
+    const { h, e } = pendingAnswered();
+    h.engine.moderationResult(e.id, { kind: 'ok' });
+    expect(e.state).toBe('pending');
+    h.engine.llmResult(e.id, { kind: 'ok', text: 'bot' });
+    expect(e.state).toBe('released');
+  });
+
+  it('a flagged answer asks the answerer to rewrite; the asker sees a wait message', () => {
+    const { h, m, e } = pendingAnswered();
+    h.engine.llmResult(e.id, { kind: 'ok', text: 'bot' });
+    h.engine.moderationResult(e.id, { kind: 'flag' });
+    expect(e.state).toBe('pending');
+    expect(e.humanText).toBeUndefined();
+    expect(e.llmText).toBe('bot'); // AI answer kept: no extra Gemini call
+    expect(h.engine.s.alerts[0].text).toMatch(/asked to rewrite/);
+
+    const asker = groupView(h.engine.s, m.interrogatorId, h.now());
+    expect(asker.interrogation![0].retry).toBe(true);
+    const answerer = groupView(h.engine.s, m.responderGroupId!, h.now());
+    expect(answerer.responding![0]).toMatchObject({ answered: false, redo: true });
+
+    // the rewrite is checked again and then released
+    expect(h.engine.handle(G(m.responderGroupId!), { t: 'answer:submit', exchangeId: e.id, text: 'better' })).toBeUndefined();
+    expect(h.mod).toHaveLength(2);
+    expect(e.state).toBe('pending');
+    h.engine.moderationResult(e.id, { kind: 'ok' });
+    expect(e.state).toBe('released');
+    expect(groupView(h.engine.s, m.interrogatorId, h.now()).interrogation![0].retry).toBe(false);
+  });
+
+  it('voids the question after repeated flags', () => {
+    const { h, m, e } = pendingAnswered();
+    for (let i = 0; i < MAX_ANSWER_FLAGS; i++) {
+      expect(e.state).toBe('pending');
+      h.engine.moderationResult(e.id, { kind: 'flag' });
+      if (i < MAX_ANSWER_FLAGS - 1) {
+        h.engine.handle(G(m.responderGroupId!), { t: 'answer:submit', exchangeId: e.id, text: `try ${i}` });
+      }
+    }
+    expect(e.state).toBe('void');
+    expect(e.voidReason).toBe('answer');
+  });
+
+  it('a failed check voids the question (fails closed)', () => {
+    const { h, e } = pendingAnswered();
+    h.engine.moderationResult(e.id, { kind: 'error', msg: 'HTTP 500' });
+    expect(e.state).toBe('void');
+    expect(e.humanText).toBeUndefined();
+    h.engine.llmResult(e.id, { kind: 'ok', text: 'late' }); // ignored
+    expect(e.state).toBe('void');
+  });
+
+  it('ignores a late verdict after an instructor block', () => {
+    const { h, e } = pendingAnswered();
+    h.engine.handle(h.I, { t: 'exchange:block', exchangeId: e.id });
+    h.engine.moderationResult(e.id, { kind: 'ok' });
+    expect(e.state).toBe('blocked');
+  });
+
+  it('re-queues unchecked answers after a restart', () => {
+    const { h, e } = pendingAnswered();
+    expect(h.engine.pendingModeration()).toEqual([{ exchangeId: e.id, question: 'q', text: 'my answer' }]);
+    h.engine.moderationResult(e.id, { kind: 'ok' });
+    expect(h.engine.pendingModeration()).toEqual([]);
+  });
+
+  it('skips the check for instructor answers', () => {
+    const h = lobby(1);
+    h.autoMod.on = false;
+    h.engine.handle(h.I, { t: 'round:start' });
+    const m = h.engine.currentMatches()[0];
+    h.engine.handle(G(m.interrogatorId), { t: 'question:submit', text: 'q' });
+    const e = h.engine.s.exchanges[0];
+    h.engine.handle(h.I, { t: 'answer:submit', exchangeId: e.id, text: 'from instructor' });
+    expect(h.mod).toHaveLength(0);
+    h.engine.llmResult(e.id, { kind: 'ok', text: 'bot' });
+    expect(e.state).toBe('released');
   });
 });
 

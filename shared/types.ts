@@ -56,6 +56,10 @@ export interface Exchange {
   state: ExchangeState;
   humanText?: string;
   llmText?: string;
+  /** True once the human answer passed the safety check (instructor answers skip it). */
+  humanChecked?: boolean;
+  /** How many times the safety check rejected the human answer; the group is asked to rewrite it. */
+  answerFlags?: number;
   humanSide?: Side;
   blockedBy?: string; // instructor id or 'llm'
   voidReason?: string;

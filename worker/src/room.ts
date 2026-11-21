@@ -1,11 +1,11 @@
 // One Durable Object per section: authoritative game state, sockets, timers, persistence.
 // All game rules live in shared/engine.ts; this file is I/O glue.
 import { DurableObject } from 'cloudflare:workers';
-import { Engine, type Actor, type LlmRequest } from '../../shared/engine';
+import { Engine, type Actor, type LlmRequest, type ModerationRequest } from '../../shared/engine';
 import { newRoomState, type ClientMsg, type RoomState, type ServerMsg } from '../../shared/types';
 import { displayView, groupView, instructorView } from '../../shared/views';
 import persona from '../prompts/persona.md';
-import { answerWithRetry, LlmQueue } from './llm';
+import { answerWithRetry, LlmQueue, moderateWithRetry } from './llm';
 import type { Env } from './index';
 
 interface Attachment {
@@ -15,6 +15,7 @@ interface Attachment {
 }
 
 const STATE_KEY = 'state';
+const SLIDER_SAVE_MS = 2000;
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -32,7 +33,10 @@ function randomToken(): string {
 export class GameRoom extends DurableObject<Env> {
   private engine: Engine | null = null;
   private inflight = new Set<string>();
-  private queue = new LlmQueue(2, (queued) => {
+  private lastSliderSave = 0;
+  // Shared by answer calls and safety checks. At ~1.5 s per Gemini call, 8 in flight is ~320 calls/min
+  // per section, well above the ~60 calls/min that 40 groups produce.
+  private queue = new LlmQueue(8, (queued) => {
     if (!this.engine) return;
     const was = this.engine.s.llm.queued;
     this.engine.s.llm.queued = queued;
@@ -54,20 +58,37 @@ export class GameRoom extends DurableObject<Env> {
       id: () => crypto.randomUUID().slice(0, 8),
       token: randomToken,
       requestLlm: (r) => this.runLlm(r),
+      requestModeration: (r) => this.runModeration(r),
     });
-    // After an eviction/restart, any question still waiting on the LLM lost its request.
+    // After an eviction/restart, any question still waiting on the LLM or the safety check lost its request.
     for (const r of this.engine.pendingLlm()) this.runLlm(r);
+    for (const r of this.engine.pendingModeration()) this.runModeration(r);
+  }
+
+  private setLimited = (limited: boolean) => {
+    if (this.engine && this.engine.s.llm.rateLimited !== limited) {
+      this.engine.s.llm.rateLimited = limited;
+      this.commit();
+    }
+  };
+
+  private runModeration(req: ModerationRequest) {
+    const key = `mod:${req.exchangeId}`;
+    if (this.inflight.has(key)) return;
+    this.inflight.add(key);
+    this.queue
+      .run(() => moderateWithRetry(this.env, req, this.setLimited))
+      .then((result) => {
+        this.inflight.delete(key);
+        this.engine?.moderationResult(req.exchangeId, result);
+        this.commit();
+      });
   }
 
   private runLlm(req: LlmRequest) {
     if (this.inflight.has(req.exchangeId)) return;
     this.inflight.add(req.exchangeId);
-    const setLimited = (limited: boolean) => {
-      if (this.engine && this.engine.s.llm.rateLimited !== limited) {
-        this.engine.s.llm.rateLimited = limited;
-        this.commit();
-      }
-    };
+    const setLimited = this.setLimited;
     this.queue
       .run(() => answerWithRetry(this.env, persona, req, setLimited))
       .then((result) => {
@@ -136,7 +157,8 @@ export class GameRoom extends DurableObject<Env> {
     const actor: Actor = { role: att.role, id: att.id };
     const err = e.handle(actor, msg);
     if (err) this.send(ws, { t: 'error', msg: err });
-    this.commit();
+    if (msg.t === 'guess:update' && !err) this.commitSlider(att);
+    else this.commit();
   }
 
   private authenticate(ws: WebSocket, msg: ClientMsg) {
@@ -230,6 +252,28 @@ export class GameRoom extends DurableObject<Env> {
     const wake = this.engine.nextWakeAt();
     if (wake) this.ctx.storage.setAlarm(wake);
     else this.ctx.storage.deleteAlarm();
+  }
+
+  /**
+   * Slider drags arrive up to 4 times a second per student. Only the dragging group and the instructors
+   * can see the slider (responders and the projector never get it), so send just those views instead of
+   * rebuilding one for every phone, and write the state at most every SLIDER_SAVE_MS.
+   * Falls back to a full commit if the clock tick moved the game on.
+   */
+  private commitSlider(from: Attachment) {
+    const e = this.engine!;
+    const before = `${e.s.phase}/${e.s.round}/${e.s.pausedRemaining === null}`;
+    e.tick();
+    if (before !== `${e.s.phase}/${e.s.round}/${e.s.pausedRemaining === null}`) return this.commit();
+    const now = Date.now();
+    if (now - this.lastSliderSave > SLIDER_SAVE_MS) {
+      this.lastSliderSave = now;
+      this.save();
+    }
+    for (const ws of this.ctx.getWebSockets()) {
+      const att = ws.deserializeAttachment() as Attachment | null;
+      if (att && (att.role === 'instructor' || (att.role === 'group' && att.id === from.id))) this.sendView(ws, att);
+    }
   }
 
   private sendView(ws: WebSocket, att: Attachment) {

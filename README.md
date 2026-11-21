@@ -59,10 +59,12 @@ This prints `https://spot-the-bot.<you>.workers.dev`. Then edit `worker/wrangler
 3. Go to Settings > Secrets and variables > Actions > **Variables** and add `WORKER_URL = https://spot-the-bot.<you>.workers.dev`.
 4. Push. The workflow runs the tests, builds, and publishes to `https://<github-user>.github.io/<repo>/`.
 
-## Gemini free tier: check before the event
+## Gemini: enable billing before the event
 
-- Google AI Studio shows your project's real limits. Third-party reports from Oct 2026 put the 3.x Flash-Lite models at about **15 requests/min and 500 requests/day**.
-- Peak load is about 5 matches × 1-2 questions/min ≈ **10 RPM**, so the per-minute cap fits. A full day of 4 sections is about **300-400 requests**, which is close to 500/day. Don't rehearse with the real key on Nov 22 itself. If the cap is lower than this, switch to a higher-limit model or enable billing.
+- Every question costs 1 Gemini call for the AI answer, and every student answer costs 1 more for the safety check. That is about 12 calls per group per game, which is more than the free tier (about 500 requests/day, per third-party reports) allows for 4 full sections. Turn on billing for the Gemini project in Google AI Studio.
+- Set a budget alert in Google Cloud Console (Billing > Budgets & alerts) so a bug or abuse can't run up a bill unnoticed.
+- Safety check: a student answer is held until Gemini replies OK. If Gemini flags it, the answering group is asked to write a different answer (the AI answer is kept) and the asker sees "Just a few more seconds". After 3 flags on one question it is voided. If the check fails (error, timeout, unclear reply), the question is voided, so a Gemini outage stops questions rather than letting unchecked text through. Instructor answers skip the check.
+- Mock-mode test hooks for the safety check: an answer containing `mockflag` is blocked, and one containing `mockmodfail` voids the question.
 - Set `LLM_MODEL` to the exact model ID shown in AI Studio. If it's wrong, every question gets voided and the dashboard shows "AI error ... HTTP 404".
 - Free-tier terms let Google use the content you submit. The server sends only the persona prompt and the question text (no names or ids), and the join screen warns students.
 
