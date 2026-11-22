@@ -57,7 +57,7 @@ describe('exchange loop', () => {
     expect(e1.recordedGuess).toBe(0.7);
   });
 
-  it('interrogator earns s and responder earns -s', () => {
+  it('interrogator and responder are a team: both earn s', () => {
     const h = lobby(2);
     h.engine.handle(h.I, { t: 'round:start' });
     const m = firstGroupMatch(h);
@@ -70,7 +70,7 @@ describe('exchange loop', () => {
     h.engine.handle(h.I, { t: 'round:reveal' });
     const sc = groupScores(h.engine.s, 1);
     expect(sc.get(m.interrogatorId)).toBe(0.5);
-    expect(sc.get(m.responderGroupId!)).toBe(-0.5);
+    expect(sc.get(m.responderGroupId!)).toBe(0.5);
   });
 
   it('LLM decline auto-blocks; instructor block discards answers', () => {
@@ -381,11 +381,11 @@ describe('instructor takeover and claim', () => {
     h.engine.llmResult(h.engine.s.exchanges[1].id, { kind: 'error', msg: 'x' }); // void it so a new question is allowed
     expect(h.engine.handle(O, { t: 'iq:submit', matchId: m.id, text: 'from other' })).toBeUndefined();
 
-    // scoring: the answering group earns -s; no score entry for the missing asker
+    // scoring: the answering group earns s like an asker would; no score entry for the missing asker
     h.engine.handle(h.I, { t: 'round:end' });
     const sc = groupScores(h.engine.s, 2);
     expect(sc.has('')).toBe(false);
-    expect(sc.get(odd)).toBeCloseTo(-0.6);
+    expect(sc.get(odd)).toBeCloseTo(0.6);
   });
 
   it('the odd group plays an instructor who answers its questions', () => {

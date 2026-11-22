@@ -372,11 +372,11 @@ function RevealCard({ e, role }: { e: RevealExchangeView; role: 'interrogator' |
       </div>
     );
   const label = (side: 'left' | 'right') => (e.humanSide === side ? 'Human' : 'AI');
-  // From the responder's view, a negative s means they fooled the interrogators.
+  // Both groups in a match are on the same team: s > 0 means the interrogator spotted the human.
   const s = e.s ?? 0;
   const verdict =
-    s === 0 ? 'No guess' : role === 'interrogator' ? (s > 0 ? 'Correct' : 'Fooled') : s < 0 ? 'You fooled them' : 'They spotted you';
-  const good = role === 'interrogator' ? s > 0 : s < 0;
+    s === 0 ? 'No guess' : role === 'interrogator' ? (s > 0 ? 'Correct' : 'Fooled') : s > 0 ? 'They spotted you' : 'The AI fooled them';
+  const good = s > 0;
   return (
     <div class="card exchange">
       <div class="q">
@@ -394,7 +394,7 @@ function RevealCard({ e, role }: { e: RevealExchangeView; role: 'interrogator' |
       </div>
       <GuessSlider value={e.recordedGuess ?? 0} ghost={e.recordedGuess} disabled />
       <div class={`verdict ${s === 0 ? '' : good ? 'good' : 'bad'}`}>
-        {verdict} {s !== 0 && <span class="muted">({fmtScore(role === 'interrogator' ? s : -s)})</span>}
+        {verdict} {s !== 0 && <span class="muted">({fmtScore(s)})</span>}
       </div>
     </div>
   );

@@ -14,13 +14,16 @@ export function scoreOf(e: Exchange): number | null {
   return isScored(e) ? exchangeScore(e.recordedGuess, e.humanSide) : null;
 }
 
-/** Per-group score for a round: interrogators earn s, responder groups earn -s. */
+/**
+ * Per-group score for a round. The two groups in a match are on the same team against the AI:
+ * both earn s, so both gain when the interrogator spots the human and both lose when the AI fools them.
+ */
 export function groupScores(state: RoomState, round: Round): Map<string, number> {
   const scores = new Map<string, number>();
   const add = (id: string, x: number) => scores.set(id, (scores.get(id) ?? 0) + x);
   for (const m of state.matches) {
     if (m.round !== round) continue;
-    // An instructor judging has no group score; the answering group still earns -s.
+    // An instructor judging has no group score; the answering group still earns s.
     const groupAsks = m.interrogatorType !== 'instructor';
     if (groupAsks) add(m.interrogatorId, 0);
     if (m.responderType === 'group' && m.responderGroupId) add(m.responderGroupId, 0);
@@ -28,7 +31,7 @@ export function groupScores(state: RoomState, round: Round): Map<string, number>
       const s = scoreOf(e);
       if (s === null) continue;
       if (groupAsks) add(m.interrogatorId, s);
-      if (m.responderType === 'group' && m.responderGroupId) add(m.responderGroupId, -s);
+      if (m.responderType === 'group' && m.responderGroupId) add(m.responderGroupId, s);
     }
   }
   return scores;
