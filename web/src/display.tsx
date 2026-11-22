@@ -3,6 +3,9 @@ import type { DisplayView } from '../../shared/views';
 import { load, useRoom } from './net';
 import { StatsBundleView, Timer } from './ui';
 
+// Short link and QR code (web/public/qr.png, made from this link) shown while the game waits to start.
+const JOIN_LINK_TEXT = 'bit.ly/wai-spot-the-bot';
+
 const TITLES: Record<string, string> = {
   lobby: 'Join the game!',
   round1_active: 'Round 1',
@@ -57,11 +60,13 @@ export function DisplayApp({ sid }: { sid: string | null }) {
       <h1>{TITLES[v.phase]}</h1>
       <div class="muted">{v.section}</div>
       {v.phase === 'lobby' && (
-        <p class="display-big">
-          {v.groupCount} group{v.groupCount === 1 ? '' : 's'} joined
-          <br />
-          <span class="muted">{location.origin + location.pathname}</span>
-        </p>
+        <>
+          <img class="join-qr" src={`${import.meta.env.BASE_URL}qr.png`} alt={`QR code for ${JOIN_LINK_TEXT}`} />
+          <p class="join-link">{JOIN_LINK_TEXT}</p>
+          <p class="display-big">
+            {v.groupCount} group{v.groupCount === 1 ? '' : 's'} joined
+          </p>
+        </>
       )}
       {active && (
         <>
