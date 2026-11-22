@@ -3,8 +3,9 @@
 import { planRound1, planRound2, type MatchPlan } from './matching';
 import { cleanText, validateGroupName } from './moderation';
 import { exchangesOf } from './scoring';
-import { isActive, presentGroups } from './views';
+import { isActive, presentGroups, revealAtWhenQuiet } from './views';
 import {
+  LOCKIN_MS,
   MAX_ANSWER,
   MAX_QUESTION,
   STALE_MS,
@@ -53,7 +54,7 @@ export interface EngineDeps {
 }
 
 /** Wait this long after the last answer arrives (post-timer) so the slider can be set. */
-export const SLIDER_SETTLE_MS = 15_000;
+export const SLIDER_SETTLE_MS = LOCKIN_MS;
 export const RETENTION_MS = 7 * 24 * 3600_000;
 /** A student answer may be flagged this many times before the question is voided. */
 export const MAX_ANSWER_FLAGS = 3;
@@ -381,8 +382,7 @@ export class Engine {
     const exs = this.currentMatches().flatMap((m) => exchangesOf(this.s, m));
     const pending = exs.some((e) => e.state === 'pending');
     if (!pending) {
-      const lastRelease = Math.max(0, ...exs.map((e) => e.releasedAt ?? 0));
-      const revealAt = Math.min(this.s.graceEndsAt, Math.max(this.s.roundEndsAt!, lastRelease + SLIDER_SETTLE_MS));
+      const revealAt = revealAtWhenQuiet(this.s) ?? this.s.roundEndsAt!;
       if (now >= revealAt) {
         this.reveal();
         return true;

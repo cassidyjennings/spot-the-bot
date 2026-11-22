@@ -353,6 +353,7 @@ function MyQuestions({ v, room }: { v: InstructorView; room: Room<InstructorView
   return (
     <div class="card queue">
       <h2 class="panel-title">You ask ({mine.length})</h2>
+      {v.lockInEndsAt !== null && <p class="warn small"><b>Time's up: lock in your guess now.</b> The round reveals in a few seconds.</p>}
       {others > 0 && <p class="warn small">{others} question match(es) belong to another instructor or none. Claim them in Matches.</p>}
       {mine.map((m) => (
         <AskBox key={m.id} m={m} room={room} />

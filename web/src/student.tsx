@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { MAX_ANSWER, MAX_QUESTION } from '../../shared/types';
 import type { GroupView, InterrogatorExchangeView, RevealExchangeView, RoundResultView } from '../../shared/views';
 import { fetchSections, load, save, useRoom, type Room, type Section } from './net';
-import { ConnBadge, GuessSlider, StatsBundleView, Timer, Toast, remainingMs, useNow } from './ui';
+import { ConnBadge, GuessSlider, StatsBundleView, Timer, Toast, fmt, remainingMs, useNow } from './ui';
 
 const KEY = 'stb.group';
 interface Saved {
@@ -68,10 +68,47 @@ export function StudentApp() {
         </div>
       </header>
       {v.pausedRemaining !== null && <div class="banner">Paused by the instructor</div>}
+      <TimeUpBanner v={v} offset={room.offset} />
       <Body v={v} room={room} />
       <Toast msg={room.error} />
     </div>
   );
+}
+
+/** After the timer ends, tells each group what to do before the round reveals. */
+function TimeUpBanner({ v, offset }: { v: GroupView; offset: number }) {
+  const now = useNow();
+  const active = v.phase === 'round1_active' || v.phase === 'round2_active';
+  if (!active || v.pausedRemaining !== null || v.roundEndsAt === null || v.role === 'waiting') return null;
+  const t = now + offset;
+  if (t < v.roundEndsAt) return null;
+  const left = (end: number | null) => (end === null ? '' : ` Results in ${fmt(Math.max(0, end - t))}.`);
+
+  if (v.role === 'interrogator') {
+    return v.lockInEndsAt !== null ? (
+      <div class="banner warn">
+        <b>Time's up! Lock in your guess now.</b> Slide toward the answer you think is the human. Your last slider position is what counts.
+        {left(v.lockInEndsAt)}
+      </div>
+    ) : (
+      <div class="banner warn">
+        <b>Time's up!</b> Waiting for the last answer. Then you'll get a few seconds to lock in your guess.
+      </div>
+    );
+  }
+  if (v.role === 'responder') {
+    const unanswered = (v.responding ?? []).some((e) => !e.answered);
+    return unanswered ? (
+      <div class="banner warn">
+        <b>Time's up! Send your answer now.</b> The last question is still waiting for you.{left(v.graceEndsAt)}
+      </div>
+    ) : (
+      <div class="banner warn">
+        <b>Time's up!</b> The other group is locking in their final guess.{left(v.lockInEndsAt)}
+      </div>
+    );
+  }
+  return null;
 }
 
 function roleLabel(v: GroupView) {

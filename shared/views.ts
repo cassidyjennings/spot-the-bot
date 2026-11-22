@@ -3,7 +3,7 @@
 // or the other group's name. tests/views.test.ts enforces this.
 import { classStats, exchangeScore, exchangesOf, groupScores, isScored, round2, type ClassStats } from './scoring';
 import { flaggedTerms } from './moderation';
-import type { Exchange, ExchangeState, Group, Instructor, Match, Phase, Round, RoomState, Side } from './types';
+import { LOCKIN_MS, type Exchange, type ExchangeState, type Group, type Instructor, type Match, type Phase, type Round, type RoomState, type Side } from './types';
 
 interface Clock {
   serverNow: number;
@@ -12,6 +12,8 @@ interface Clock {
   roundEndsAt: number | null;
   pausedRemaining: number | null;
   graceEndsAt: number | null;
+  /** Set while askers have a last window to lock in their guess after time is up; the round reveals then. */
+  lockInEndsAt: number | null;
   section: string;
 }
 
@@ -119,6 +121,26 @@ export function isActive(phase: Phase) {
   return phase === 'round1_active' || phase === 'round2_active';
 }
 
+/**
+ * When a round whose timer has ended will reveal by itself, provided no question is still waiting on an answer
+ * (null while one is: that case is covered by the grace period). If any asker has an unlocked guess, the reveal
+ * waits LOCKIN_MS after the later of time-up and the last answer.
+ */
+export function revealAtWhenQuiet(s: RoomState): number | null {
+  if (!isActive(s.phase) || s.roundEndsAt === null) return null;
+  const exs = s.matches.filter((m) => m.round === s.round).flatMap((m) => exchangesOf(s, m));
+  if (exs.some((e) => e.state === 'pending')) return null;
+  if (!exs.some((e) => e.state === 'released' && e.recordedGuess === null)) return s.roundEndsAt;
+  const lastRelease = Math.max(0, ...exs.map((e) => e.releasedAt ?? 0));
+  return Math.max(s.roundEndsAt, lastRelease) + LOCKIN_MS;
+}
+
+function lockInEndsAt(s: RoomState, now: number): number | null {
+  if (s.roundEndsAt === null || s.pausedRemaining !== null || now < s.roundEndsAt) return null;
+  const at = revealAtWhenQuiet(s);
+  return at !== null && at > s.roundEndsAt ? at : null;
+}
+
 function clock(s: RoomState, now: number): Clock {
   return {
     serverNow: now,
@@ -127,6 +149,7 @@ function clock(s: RoomState, now: number): Clock {
     roundEndsAt: s.roundEndsAt,
     pausedRemaining: s.pausedRemaining,
     graceEndsAt: s.graceEndsAt,
+    lockInEndsAt: lockInEndsAt(s, now),
     section: s.sectionName,
   };
 }

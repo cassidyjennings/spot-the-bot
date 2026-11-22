@@ -110,6 +110,8 @@ export const DEFAULT_CONFIG: RoomConfig = { roundMs: 5 * 60_000, graceMs: 60_000
 export const MAX_QUESTION = 300;
 export const MAX_ANSWER = 500;
 export const STALE_MS = 45_000;
+/** After time is up, askers get this long (after the last answer arrives) to lock in their final guess. */
+export const LOCKIN_MS = 15_000;
 
 export function newRoomState(sessionId: string, sectionName: string): RoomState {
   return {

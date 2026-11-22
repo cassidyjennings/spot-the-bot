@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_ANSWER_FLAGS } from '../shared/engine';
+import { LOCKIN_MS } from '../shared/types';
 import { exchangeScore, groupScores } from '../shared/scoring';
 import { groupView } from '../shared/views';
 import { lobby } from './helpers';
@@ -96,6 +97,57 @@ describe('exchange loop', () => {
     h.engine.llmResult(e3.id, { kind: 'error', msg: 'timeout' });
     expect(e3.state).toBe('void');
     expect(h.engine.s.alerts.length).toBe(2);
+  });
+});
+
+describe('last chance to lock in a guess after time is up', () => {
+  function oneReleased() {
+    const h = lobby(2);
+    h.engine.handle(h.I, { t: 'round:start' });
+    const m = firstGroupMatch(h);
+    h.engine.handle(G(m.interrogatorId), { t: 'question:submit', text: 'q' });
+    const e = h.engine.s.exchanges[0];
+    h.engine.handle(G(m.responderGroupId!), { t: 'answer:submit', exchangeId: e.id, text: 'a' });
+    h.engine.llmResult(e.id, { kind: 'ok', text: 'b' });
+    return { h, m, e };
+  }
+
+  it('gives askers LOCKIN_MS after time-up even if the last answer came much earlier', () => {
+    const { h, m, e } = oneReleased();
+    h.advance(h.engine.s.config.roundMs + 1000); // answer was released minutes ago
+    expect(h.engine.s.phase).toBe('round1_active');
+    const v = groupView(h.engine.s, m.interrogatorId, h.now());
+    expect(v.lockInEndsAt).toBe(h.engine.s.roundEndsAt! + LOCKIN_MS);
+    // slider still works inside the window and the value is what gets recorded
+    h.engine.handle(G(m.interrogatorId), { t: 'guess:update', exchangeId: e.id, v: 0.8 });
+    expect(e.slider).toBe(0.8);
+    h.advance(LOCKIN_MS);
+    expect(h.engine.s.phase).toBe('round1_reveal');
+    expect(e.recordedGuess).toBe(0.8);
+  });
+
+  it('reveals at once when nothing is left to lock in', () => {
+    const h = lobby(2);
+    h.engine.handle(h.I, { t: 'round:start' });
+    h.advance(h.engine.s.config.roundMs + 1000);
+    expect(h.engine.s.phase).toBe('round1_reveal');
+  });
+
+  it('a late answer restarts the window from its release', () => {
+    const h = lobby(2);
+    h.engine.handle(h.I, { t: 'round:start' });
+    const m = firstGroupMatch(h);
+    h.advance(h.engine.s.config.roundMs - 1000);
+    h.engine.handle(G(m.interrogatorId), { t: 'question:submit', text: 'last one' });
+    const e = h.engine.s.exchanges[0];
+    h.engine.handle(G(m.responderGroupId!), { t: 'answer:submit', exchangeId: e.id, text: 'a' });
+    h.advance(10_000); // time is up, one answer still missing: grace period, no lock-in yet
+    expect(groupView(h.engine.s, m.interrogatorId, h.now()).lockInEndsAt).toBeNull();
+    h.engine.llmResult(e.id, { kind: 'ok', text: 'b' });
+    const v = groupView(h.engine.s, m.interrogatorId, h.now());
+    expect(v.lockInEndsAt).toBe(e.releasedAt! + LOCKIN_MS);
+    h.advance(LOCKIN_MS);
+    expect(h.engine.s.phase).toBe('round1_reveal');
   });
 });
 
